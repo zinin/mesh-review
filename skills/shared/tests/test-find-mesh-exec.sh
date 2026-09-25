@@ -25,7 +25,7 @@ plant() {   # plant <dir>: a fake mesh-exec root
 }
 run() {     # run <HOME> [GROK_SESSION_ID] [MESH_EXEC_ROOT] → OUT ERR RC
     OUT="$(env -u MESH_EXEC_ROOT -u GROK_SESSION_ID HOME="$1" ${2:+GROK_SESSION_ID="$2"} ${3:+MESH_EXEC_ROOT="$3"} \
-        bash -c 'set -euo pipefail; bash "$0"' "$SCRIPT" 2>"$T/err")"; RC=$?
+        bash -euo pipefail "$SCRIPT" 2>"$T/err")"; RC=$?
     ERR="$(cat "$T/err")"
 }
 
