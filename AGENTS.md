@@ -15,7 +15,11 @@ MESH_EXEC_ROOT=/path/to/mesh-exec claude --plugin-dir /path/to/mesh-exec \
 Disable marketplace copies of the three first (`claude plugin disable <name>@zinin`) and
 re-enable them afterwards. In Grok install a snapshot of each (`grok plugin install <path>
 --trust`), one snapshot per plugin; `MESH_EXEC_ROOT` is not needed there — the finder takes
-the `installed-plugins` snapshot inside a Grok session.
+the `installed-plugins` snapshot inside a Grok session. Grok ignores `dependencies`:
+installing mesh-review brings neither mesh-exec nor session-relay. It names a snapshot after
+its source directory, and the finder matches `mesh-exec` only, so install mesh-exec from a
+directory named `mesh-exec` (a copy is fine): a checkout still named `claude-mesh` gives
+`claude-mesh-<hash>`, which the finder never takes.
 
 ## Cross-plugin contract
 
