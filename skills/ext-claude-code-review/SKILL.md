@@ -73,6 +73,8 @@ else
   SKILL_BASE="$PLUGIN_ROOT/skills/ext-claude-code-review"
 fi
 SHARED_DIR="$SKILL_BASE/../shared"
+MESH_EXEC=$(bash "$SKILL_BASE/../shared/find-mesh-exec.sh") || exit 1
+echo "MESH_EXEC=$MESH_EXEC"   # the no-Skill-tool step below reads mesh-exec's exec skill from this root
 # Resolve the base branch ONCE. Auto-detect origin/HEAD, else fall back to master.
 # NB: do NOT write the fallback as `symbolic-ref | sed || echo master` — `||` binds to
 # the pipeline whose status is sed's (0 on empty input), so `echo master` would be dead
@@ -127,7 +129,7 @@ python3 "$SHARED_DIR/render-template.py" "$SHARED_DIR/code-review-prompt.md" \
 Skill tool -> skill: "mesh-exec:ext-claude-exec"
 ```
 
-**If this host has no Skill tool** (Grok Build): `Read` mesh-exec's `skills/ext-claude-exec/SKILL.md` and follow every step. mesh-exec's root is what `bash "$SKILL_BASE/../shared/find-mesh-exec.sh"` prints — `$MESH_EXEC_ROOT` when set, else `$HOME/.grok/installed-plugins` (inside a Grok session only), then `$HOME/.claude/plugins`, then `$HOME/.grok/plugins`, each version-sorted.
+**If this host has no Skill tool** (Grok Build): `Read` mesh-exec's `skills/ext-claude-exec/SKILL.md` and follow every step. mesh-exec's root is the `MESH_EXEC=` line the Step 1 fence printed — what `find-mesh-exec.sh` found: `$MESH_EXEC_ROOT` when set, else `$HOME/.grok/installed-plugins` (inside a Grok session only), then `$HOME/.claude/plugins`, then `$HOME/.grok/plugins`, each version-sorted.
 Following the skill **is** CLI delegation. It is not a review you perform yourself.
 
 Pass these parameters:

@@ -124,6 +124,7 @@ else
 fi
 MESH_EXEC=$(bash "$SKILL_BASE/../shared/find-mesh-exec.sh") || exit 1
 LOADER="$MESH_EXEC/skills/shared/config-loader.sh"
+echo "MESH_EXEC=$MESH_EXEC"   # the no-Skill-tool step below reads mesh-exec's exec skill from this root
 command -v grok >/dev/null 2>&1 || { echo "STOP: grok CLI not found — install Grok Build with 'curl -fsSL https://x.ai/cli/install.sh | bash', then run 'grok login'"; exit 1; }
 echo "OK: grok found"
 command -v python3 >/dev/null 2>&1 || { echo "STOP: python3 not found - required by shared/render-template.py (Step 3)"; exit 1; }
@@ -323,7 +324,7 @@ text for Step 4.
 Skill tool -> skill: "mesh-exec:grok-exec"
 ```
 
-**If this host has no Skill tool** (Grok Build): `Read` mesh-exec's `skills/grok-exec/SKILL.md` and follow every step. mesh-exec's root is what `bash "$SKILL_BASE/../shared/find-mesh-exec.sh"` prints — `$MESH_EXEC_ROOT` when set, else `$HOME/.grok/installed-plugins` (inside a Grok session only), then `$HOME/.claude/plugins`, then `$HOME/.grok/plugins`, each version-sorted.
+**If this host has no Skill tool** (Grok Build): `Read` mesh-exec's `skills/grok-exec/SKILL.md` and follow every step. mesh-exec's root is the `MESH_EXEC=` line the Pre-flight fence printed — what `find-mesh-exec.sh` found: `$MESH_EXEC_ROOT` when set, else `$HOME/.grok/installed-plugins` (inside a Grok session only), then `$HOME/.claude/plugins`, then `$HOME/.grok/plugins`, each version-sorted.
 Following the skill **is** CLI delegation. It is not a review you perform yourself.
 
 Pass these parameters:

@@ -90,13 +90,17 @@ echo ""
 echo "=== Test: Grok reads each exec skill from mesh-exec, through find-mesh-exec.sh ==="
 # The review skill → exec SKILL.md hop crosses into another plugin. The no-Skill-tool paragraph
 # must hand the path to find-mesh-exec.sh (MESH_EXEC_ROOT, then installed-plugins inside a Grok
-# session, then .claude, then .grok) and must not name the old plugin.
+# session, then .claude, then .grok) and must not name the old plugin. The model follows it in a
+# fresh shell, where $SKILL_BASE is empty on Grok: the paragraph must not use $SKILL_BASE, and the
+# skill's fence must echo the MESH_EXEC= line the paragraph points at.
 REVIEW_SKILLS="claude-code-review ext-claude-code-review codex-code-review gemini-code-review grok-code-review"
 read_bad=0
 for s in $REVIEW_SKILLS; do
     para="$(awk '/If this host has no Skill tool/,/Following the skill/' "$REPO/skills/$s/SKILL.md")"
     printf '%s' "$para" | grep -q 'find-mesh-exec.sh' || { read_bad=$((read_bad+1)); echo "    $s: no find-mesh-exec.sh"; }
     if printf '%s' "$para" | grep -q 'claude-mesh'; then read_bad=$((read_bad+1)); echo "    $s: still names claude-mesh"; fi
+    grep -qF 'echo "MESH_EXEC=$MESH_EXEC"' "$REPO/skills/$s/SKILL.md" || { read_bad=$((read_bad+1)); echo "    $s: no fence echoes MESH_EXEC="; }
+    if printf '%s' "$para" | grep -qF '$SKILL_BASE'; then read_bad=$((read_bad+1)); echo "    $s: paragraph uses \$SKILL_BASE (empty in a fresh Grok shell)"; fi
 done
 assert_eq "every review→exec Read goes through find-mesh-exec.sh" "0" "$read_bad"
 
