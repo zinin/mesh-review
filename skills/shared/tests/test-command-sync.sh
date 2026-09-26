@@ -218,9 +218,9 @@ fi
 # the script name. It does NOT pin what the orchestrators may call; it widens what these two
 # GENERATORS are forbidden to invoke. A subcommand missing from it is a hole of exactly that
 # width: a generator could write `config-loader.sh get-grok` and pattern 1 would not see it.
-# Keep it equal to the case arms at the bottom of config-loader.sh.
+# Keep it equal to the case arms at the bottom of mesh-exec's config-loader.sh.
 echo "=== Test 5: the generators never read the local config ==="
-LOADER_SUBCMDS='validate|data-dir|export|get-flag|list-models|list-claude-models|list-grok-models|list-providers|get-defaults|get-runtime|get-codex|get-gemini|get-grok'
+LOADER_SUBCMDS='validate|config-path|data-dir|export|get-flag|list-models|list-claude-models|list-grok-models|list-providers|get-defaults|get-runtime|get-codex|get-gemini|get-grok'
 for CMD_FILE in "$DESIGN_CMD" "$CODE_CMD"; do
     CMD_NAME="$(basename "$CMD_FILE")"
     assert_eq "$CMD_NAME: no config-loader.sh <subcommand> invocation" "0" \
@@ -270,13 +270,13 @@ done
 # build a diff-review prompt of their own. Cross them and grok reviews a git diff during a
 # design review — a run that looks entirely healthy while answering the wrong question.
 assert_ge "design review dispatches grok-executor" "1" \
-    "$(grep -c 'claude-mesh:grok-executor' "$DESIGN_SKILL")"
+    "$(grep -c 'mesh-exec:grok-executor' "$DESIGN_SKILL")"
 assert_eq "design review never dispatches grok-code-reviewer" "0" \
-    "$(grep -c 'claude-mesh:grok-code-reviewer' "$DESIGN_SKILL")"
+    "$(grep -c 'mesh-review:grok-code-reviewer' "$DESIGN_SKILL")"
 assert_ge "mesh-review dispatches grok-code-reviewer" "1" \
-    "$(grep -c 'claude-mesh:grok-code-reviewer' "$MESH_REVIEW")"
+    "$(grep -c 'mesh-review:grok-code-reviewer' "$MESH_REVIEW")"
 assert_eq "mesh-review never dispatches grok-executor" "0" \
-    "$(grep -c 'claude-mesh:grok-executor' "$MESH_REVIEW")"
+    "$(grep -c 'mesh-exec:grok-executor' "$MESH_REVIEW")"
 
 # `grok_degraded` is the loader's only signal that a preset asked for grok and got nothing —
 # it emits the preset with grok stripped, so the absence is otherwise invisible. Both preset
@@ -321,13 +321,13 @@ for f in "$MESH_REVIEW" "$DESIGN_SKILL"; do
 done
 # mesh-review dispatches claude-code-reviewer; design review dispatches claude-executor.
 assert_ge "design review dispatches claude-executor" "1" \
-    "$(grep -c 'claude-mesh:claude-executor' "$DESIGN_SKILL")"
+    "$(grep -c 'mesh-exec:claude-executor' "$DESIGN_SKILL")"
 assert_eq "design review never dispatches claude-code-reviewer" "0" \
-    "$(grep -c 'claude-mesh:claude-code-reviewer' "$DESIGN_SKILL")"
+    "$(grep -c 'mesh-review:claude-code-reviewer' "$DESIGN_SKILL")"
 assert_ge "mesh-review dispatches claude-code-reviewer" "1" \
-    "$(grep -c 'claude-mesh:claude-code-reviewer' "$MESH_REVIEW")"
+    "$(grep -c 'mesh-review:claude-code-reviewer' "$MESH_REVIEW")"
 assert_eq "mesh-review never dispatches claude-executor" "0" \
-    "$(grep -c 'claude-mesh:claude-executor' "$MESH_REVIEW")"
+    "$(grep -c 'mesh-exec:claude-executor' "$MESH_REVIEW")"
 
 # Every `ни одной …` sentinel must carry its own drop clause. The sentinel exists because
 # AskUserQuestion refuses a one-option page, so each of the three model pages offers its empty
@@ -457,11 +457,11 @@ for f in "$MESH_REVIEW" "$DESIGN_SKILL"; do
         "$(grep -c 'Other is not an id' "$f")"
 done
 assert_ge "design review Grok review-discussion is spawn_subagent" "1" \
-    "$(grep -c 'spawn_subagent claude-mesh:review-discussion background true' "$DESIGN_SKILL")"
+    "$(grep -c 'spawn_subagent mesh-review:review-discussion background true' "$DESIGN_SKILL")"
 assert_ge "mesh-review Step 0 Grok claude is claude-code-reviewer" "1" \
-    "$(grep -c 'HOST=grok: one `claude-mesh:claude-code-reviewer` per entry' "$MESH_REVIEW")"
+    "$(grep -c 'HOST=grok: one `mesh-review:claude-code-reviewer` per entry' "$MESH_REVIEW")"
 assert_ge "design review Step 5.1 Grok claude is claude-executor" "1" \
-    "$(grep -c 'HOST=grok: one `claude-mesh:claude-executor` per entry' "$DESIGN_SKILL")"
+    "$(grep -c 'HOST=grok: one `mesh-exec:claude-executor` per entry' "$DESIGN_SKILL")"
 
 echo ""
 echo "=== Summary: $PASS passed, $FAIL failed, $SKIP skipped ==="

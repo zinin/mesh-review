@@ -306,7 +306,7 @@ The `cat` output — the rendered template — is the formatted prompt text for 
 **If this host has a Skill tool** (Claude Code): invoke `ext-claude-exec` with the Skill tool, then follow it.
 
 ```
-Skill tool -> skill: "claude-mesh:ext-claude-exec"
+Skill tool -> skill: "mesh-exec:ext-claude-exec"
 ```
 
 **If this host has no Skill tool** (Grok Build): `Read` the plugin's `skills/ext-claude-exec/SKILL.md` and follow every step. Plugin root: `$CLAUDE_PLUGIN_ROOT` or `$GROK_PLUGIN_ROOT` if set to an existing directory; otherwise

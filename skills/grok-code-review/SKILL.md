@@ -263,7 +263,7 @@ python3 "$SKILL_BASE/../shared/render-template.py" "$SKILL_BASE/../shared/code-r
     PLAN_REFERENCE="$PLAN_REF" \
     > "$PROMPT_FILE" || { echo "STOP: prompt render failed - see stderr above"; exit 1; }
 [ -s "$PROMPT_FILE" ] || { echo "STOP: rendered prompt is empty"; exit 1; }
-# Grok loads the user's Claude Code plugins, so `claude-mesh:mesh-review` and every other
+# Grok loads the user's Claude Code plugins, so `mesh-review:mesh-review` and every other
 # skill on this machine is visible to it. Nothing stops it from "helpfully" launching one
 # instead of reviewing — and a nested orchestration would write run dirs this session never
 # dispatched. codex and gemini need no such line: they cannot see those skills at all.
@@ -272,7 +272,7 @@ cat >> "$PROMPT_FILE" << 'GROK_TOOLING_EOF' || { echo "STOP: could not append th
 ## Tooling constraint
 
 Do NOT invoke any skill or slash command, and do NOT delegate this review to another agent or
-orchestration. Names like `claude-mesh:mesh-review` may be visible in your environment; they
+orchestration. Names like `mesh-review:mesh-review` may be visible in your environment; they
 are not part of this task. Read the code with your own file, search and shell tools, and
 answer with the review itself.
 GROK_TOOLING_EOF
@@ -319,7 +319,7 @@ text for Step 4.
 **If this host has a Skill tool** (Claude Code): invoke `grok-exec` with the Skill tool, then follow it.
 
 ```
-Skill tool -> skill: "claude-mesh:grok-exec"
+Skill tool -> skill: "mesh-exec:grok-exec"
 ```
 
 **If this host has no Skill tool** (Grok Build): `Read` the plugin's `skills/grok-exec/SKILL.md` and follow every step. Plugin root: `$CLAUDE_PLUGIN_ROOT` or `$GROK_PLUGIN_ROOT` if set to an existing directory; otherwise

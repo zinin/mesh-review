@@ -58,7 +58,7 @@ Optional (caller can specify):
 - **CODEX_MODEL** — Codex model. Default: resolved from `config.yaml` (`codex.model`) by the codex executor itself; final fallback "gpt-5.5". Set only when the user explicitly overrides.
 - **CODEX_REASONING_LEVEL** — reasoning level (`none|minimal|low|medium|high|xhigh|ultra`, known set as of 2026-07; unknown values pass through to codex). Default: resolved from `config.yaml` (`codex.reasoning_level`) by the executor; final fallback "xhigh". Set only when the user explicitly overrides.
 - **GROK_REASONING_EFFORT** — reasoning effort for grok (`low|medium|high|xhigh|max`, known set as of 2026-08; unknown values pass through to the grok CLI). Default: resolved from `config.yaml` by the executor for the model it runs — `grok.model_efforts[<model>]`, then the section-wide `grok.reasoning_effort`; when both are unset, the CLI's own default applies — there is no hardcoded final fallback here, unlike codex. Set only when the user explicitly overrides.
-- **DEFAULT** — if `default` argument is passed, skip the Step 5 selection UI and use the `defaults.design_review` preset from `config.yaml` (`codex` / `gemini` in `builtin` → their executor; `grok` in `builtin` → one `claude-mesh:grok-executor` per entry of `grok_models`; `claude` in `builtin` → HOST=claude-code: one built-in `general-purpose` reviewer per entry of `claude_models` (or a single one in the fallback case); HOST=grok: one `claude-mesh:claude-executor` per entry of `claude_models` with `MODEL=` per alias, not `general-purpose` with `model: opus`; each `models` id → `claude-mesh:ext-claude-executor MODEL=<id>`). See Step 5.
+- **DEFAULT** — if `default` argument is passed, skip the Step 5 selection UI and use the `defaults.design_review` preset from `config.yaml` (`codex` / `gemini` in `builtin` → their executor; `grok` in `builtin` → one `mesh-exec:grok-executor` per entry of `grok_models`; `claude` in `builtin` → HOST=claude-code: one built-in `general-purpose` reviewer per entry of `claude_models` (or a single one in the fallback case); HOST=grok: one `mesh-exec:claude-executor` per entry of `claude_models` with `MODEL=` per alias, not `general-purpose` with `model: opus`; each `models` id → `mesh-exec:ext-claude-executor MODEL=<id>`). See Step 5.
 - **AUTODECIDE** — **bind this at the top of Step 5**, before that step's `default` branch, and
   echo `AUTODECIDE=true|false`. Not inside Step 5.1: that sub-step executes only when `default`
   was passed, so a binding placed there never runs on an interactive `autodecide` review.
@@ -66,7 +66,7 @@ Optional (caller can specify):
   name raises no error in a prompt — the reader improvises, and a run started with `autodecide`
   silently waits for the user after all. If the `autodecide` argument is passed, the disputed
   phase (Step 12) does not
-  wait for the user: it hands over to `/claude-mesh:auto-decide-disputed`, which writes the same
+  wait for the user: it hands over to `/mesh-review:auto-decide-disputed`, which writes the same
   analysis, adds an explicit self-check, and applies its own recommendation, one commit per
   decision. Orthogonal to `default` and combinable with it and with `DESIGN_PATH`/`PLAN_PATH`/
   `TOPIC`; order does not matter.
@@ -83,7 +83,7 @@ These rules are NON-NEGOTIABLE. Steps 9–12 implement them; this list exists so
 4. **Every disputed issue gets a structured analysis** (Суть → Анализ → Варианты → Рекомендация). Bullet-only one-liners are forbidden. Write enough that someone who hasn't read the review can follow.
 5. **Always evaluate the variants you propose.** Each variant gets pros/cons, and you explicitly recommend ONE with reasoning. Never list variants neutrally.
 6. **If only one variant is genuinely adequate, do not ask the user.** Announce the decision, briefly say why the others fail, apply, move on. Asking when there's no real choice is noise.
-7. **One disputed issue at a time.** Present its analysis; if one variant is adequate, apply it in the same message and move on; if a choice remains, the analysis is the FINAL message of the turn (no tool call) and you wait for the user's free-text answer, then apply and start the next. In `autodecide` mode do not wait: follow `/claude-mesh:auto-decide-disputed`, which applies your own recommendation after an explicit self-check. (This skill has no `default`-mode deferral to suppress; «стоп» still stops the run and defers the remainder.) Never batch.
+7. **One disputed issue at a time.** Present its analysis; if one variant is adequate, apply it in the same message and move on; if a choice remains, the analysis is the FINAL message of the turn (no tool call) and you wait for the user's free-text answer, then apply and start the next. In `autodecide` mode do not wait: follow `/mesh-review:auto-decide-disputed`, which applies your own recommendation after an explicit self-check. (This skill has no `default`-mode deferral to suppress; «стоп» still stops the run and defers the remainder.) Never batch.
 8. **When a choice remains, the analysis IS the question — never AskUserQuestion.** The structured write-up (variants with pros/cons + recommendation) is the turn-final message; the turn ends with no trailing tool call and the user answers in free text. In `autodecide` mode the analysis is not a question at all — see Step 12. A trailing AskUserQuestion duplicates your write-up in its own modal UI and makes the harness drop the analysis — the user then sees only a bare modal. This is the regression this rule prevents.
 
 ### Red Flags — STOP if you catch yourself doing this
@@ -252,7 +252,7 @@ This composed prompt is self-contained and gets passed to each executor agent in
      Change both or neither. -->
 Reviewer selection is **config-driven** — there are no hardcoded provider/model lists. Read the available executors and models from `config.yaml` via the loader, then either honor the `defaults.design_review` preset (`default` argument) or run the paginated selection UI. **Selection is made on the FIRST iteration only and reused for every subsequent iteration in the loop** — remember the resulting agent set (built-ins + native models + Claude models + grok models + ext-claude model ids). Step 5.4 states the same items, named variables among them — the built-in TYPES is the one Q1 and Step 5.2.1 write directly, with no variable of its own ("What Q1's answer becomes" below says so in as many words); the two must always agree about what is remembered.
 
-**Bind `AUTODECIDE` here, before anything else in this step** — unconditionally, whether or not `default` was passed: it is `true` when `autodecide` appears among the arguments, `false` otherwise. Echo it (`AUTODECIDE=true|false`) so it is on screen. Step 5.1 is the wrong home for it — that sub-step runs in `default` mode only, while `autodecide` is orthogonal to `default` and just as valid on an interactive run. Its only consumer is Step 12, a whole review cycle and a background watch loop away; an unbound name raises no error in a prompt — the reader improvises, and a run started with `autodecide` quietly waits for the user after all. Like the agent set, it is bound on the first iteration and holds for any further iteration run in THIS session — it does not survive into a fresh one, since `/claude-mesh:design-review-fresh-session` builds the next invocation out of DESIGN_PATH/PLAN_PATH/TOPIC and carries no `autodecide`, so a next iteration that should also run unattended needs the word typed into that generated prompt by hand. Same reason `/claude-mesh:mesh-review` binds it in its Step 0.
+**Bind `AUTODECIDE` here, before anything else in this step** — unconditionally, whether or not `default` was passed: it is `true` when `autodecide` appears among the arguments, `false` otherwise. Echo it (`AUTODECIDE=true|false`) so it is on screen. Step 5.1 is the wrong home for it — that sub-step runs in `default` mode only, while `autodecide` is orthogonal to `default` and just as valid on an interactive run. Its only consumer is Step 12, a whole review cycle and a background watch loop away; an unbound name raises no error in a prompt — the reader improvises, and a run started with `autodecide` quietly waits for the user after all. Like the agent set, it is bound on the first iteration and holds for any further iteration run in THIS session — it does not survive into a fresh one, since `/mesh-review:design-review-fresh-session` builds the next invocation out of DESIGN_PATH/PLAN_PATH/TOPIC and carries no `autodecide`, so a next iteration that should also run unattended needs the word typed into that generated prompt by hand. Same reason `/mesh-review:mesh-review` binds it in its Step 0.
 
 **Detect HOST here**, after AUTODECIDE, before Step 5.0: `HOST=grok` if this session has a
 `spawn_subagent` tool, else `HOST=claude-code`. Presence of `spawn_subagent` is the test. Do not
@@ -300,7 +300,7 @@ case "$LRC" in
   0) ;;
   # Name the dir the loader actually reads — a literal placeholder here would be substituted
   # by the harness and, under a --plugin-dir load, would point at the wrong data dir.
-  2) echo "config.yaml ещё не создан. Скопируйте config.example.yaml в $("$LOADER" data-dir)/config.yaml, заполните токены и повторите /claude-mesh:mesh-design-review."; rm -f "$LOADER_ERR"; exit 0 ;;
+  2) echo "config.yaml ещё не создан. Скопируйте config.example.yaml в $("$LOADER" data-dir)/config.yaml, заполните токены и повторите /mesh-review:mesh-design-review."; rm -f "$LOADER_ERR"; exit 0 ;;
   *) echo "config.yaml невалиден:" >&2; cat "$LOADER_ERR" >&2; rm -f "$LOADER_ERR"; exit 1 ;;
 esac
 rm -f "$LOADER_ERR"
@@ -407,22 +407,22 @@ rc=0 → proceed; rc=2 → fresh-install hint + clean exit; rc=1 → surface the
 **If the `default` argument was passed:** skip the entire selection UI (Steps 5.2–5.3). Use the `defaults.design_review` preset from `DEFAULTS_JSON`:
 
 - If `defaults.design_review` is missing/empty (`.builtin` empty AND `.models` empty) → STOP with a clear error:
-  `defaults.design_review not configured in config.yaml. Run /claude-mesh:mesh-design-review without "default" or add the preset.`
+  `defaults.design_review not configured in config.yaml. Run /mesh-review:mesh-design-review without "default" or add the preset.`
 - For each entry in `.builtin`:
   - `claude` → expand over `.claude_models` (this branch was MISSING before this feature, which is why `claude` in `defaults.design_review.builtin` used to be silently dropped):
     - HOST=claude-code, list non-empty → **one `general-purpose` reviewer per entry**, each dispatched with `model: "<entry>"`, which **overrides** `DISPATCH_MODEL` for these reviewers. Name them `claude:<model>` everywhere downstream.
     <!-- SYNC: the fallback rule in the next bullet is ONE rule living in four places — this file's Step 5.2.5 ("Empty selection is not an error"), and `commands/mesh-review.md` Step 0 / Step 2.4. Change all four or none. -->
     - HOST=claude-code, list absent/empty → exactly **one** reviewer named `claude`, with `model: "<DISPATCH_MODEL>"` when that is non-empty, otherwise no `model:` at all (inherits the session model).
-    - HOST=grok: one `claude-mesh:claude-executor` per entry of `claude_models` with `MODEL=` per alias (never `general-purpose` with `model: opus`). Empty/absent list → one executor, **no MODEL line** (CLI default). Do not pass spawn `model: opus`. Name them `claude:<model>` (or `claude` in the empty-list fallback).
+    - HOST=grok: one `mesh-exec:claude-executor` per entry of `claude_models` with `MODEL=` per alias (never `general-purpose` with `model: opus`). Empty/absent list → one executor, **no MODEL line** (CLI default). Do not pass spawn `model: opus`. Name them `claude:<model>` (or `claude` in the empty-list fallback).
   - **Bind `SELECTED_CLAUDE_MODELS` to that resolved list here** (`.claude_models`, or empty in the fallback case), exactly as `/mesh-review` Step 0 does. Step 5.4 remembers `SELECTED_CLAUDE_MODELS` for iterations 2..N, so in `default` mode it must actually hold something by then.
   - **On HOST=claude-code, `native` in builtin collapses to this same host set.** Treat `native` as `claude` for host reviewers — `native ∪ claude` is one set sourced from `claude_models` (and the empty-list fallback above). Ignore `.native_models`. **Bind `SELECTED_NATIVE_MODELS` to the empty list** — on Claude Code the host set is `SELECTED_CLAUDE_MODELS`; native bullets must not appear on confirm.
-  - **On HOST=grok, `native` is a separate type.** `claude` in builtin is the Claude Code CLI (`claude-mesh:claude-executor`), not host slugs. If `native` is not in `.builtin`: **bind `SELECTED_NATIVE_MODELS` to the empty list**. If `.native_models` is non-empty and `native` is not in builtin, the loader already rejected the file.
+  - **On HOST=grok, `native` is a separate type.** `claude` in builtin is the Claude Code CLI (`mesh-exec:claude-executor`), not host slugs. If `native` is not in `.builtin`: **bind `SELECTED_NATIVE_MODELS` to the empty list**. If `.native_models` is non-empty and `native` is not in builtin, the loader already rejected the file.
   - On HOST=grok, use `HOST_MODELS` from Step 5.0:
     - **If `claude` was requested and `HAS_CLAUDE_CLI=0`: print `claude: CLI не найден — claude-ревьюер не запущен; остальные движки работают.`, bind `SELECTED_CLAUDE_MODELS` empty and remove `claude` from selected types.** Design §7 requires a spoken degrade here, exactly like `native_degraded` just below and `grok_degraded` above. Without it the executor is dispatched, dies inside `skills/claude-code-review/SKILL.md` on its own `command -v claude` STOP, leaves no run dir, and is scored `FLIP` — a verdict that prescribes a re-dispatch which fails identically. `HAS_CLAUDE_CLI` is probed in the Step 5.0 fence and until now was read only by the interactive pages.
     - If `native` was requested and `HOST_MODELS` is empty: print `native не запущен; остальные работают.` **bind `SELECTED_NATIVE_MODELS` empty**, and **remove native from selected types** (`native_degraded` spoken, not a loader flag). Empty `SELECTED_NATIVE_MODELS` is then "no native reviewers", not omit-`model:`.
     - If `native` was requested and `HOST_MODELS` is non-empty: intersect `.native_models` with `HOST_MODELS` (`grep -Fxq`); skip missing slugs with **one WARN**, not one per slug. **Bind `SELECTED_NATIVE_MODELS` to the intersection.** An originally empty/absent `.native_models` stays empty — that is the signal for one session-model reviewer (omit `model:` at dispatch), and `native` stays selected. If `.native_models` was **non-empty** and the intersection is empty: do not run native, **remove native from selected types**, bind `SELECTED_NATIVE_MODELS` empty, and **do not substitute the session model**.
-  - `codex` → spawn `claude-mesh:codex-executor`
-  - `gemini` → spawn `claude-mesh:gemini-executor`
+  - `codex` → spawn `mesh-exec:codex-executor`
+  - `gemini` → spawn `mesh-exec:gemini-executor`
   <!-- SYNC: the "no fallback" rule in the next bullet is ONE rule living in five places — this
        bullet, this file's Step 5.2.6 ("An empty selection runs no grok reviewer"), and their two
        twins in the sibling orchestrator (`commands/mesh-review.md` Step 0's grok preset bullet
@@ -432,7 +432,7 @@ rc=0 → proceed; rc=2 → fresh-install hint + clean exit; rc=1 → surface the
        branch and on its model page, and the design doc states it once. Change all five or none:
        a copy that still promises a fallback would have the orchestrator dispatch a reviewer the
        agent then refuses to start for want of a MODEL. -->
-  - `grok` → **one `claude-mesh:grok-executor` per entry of `.grok_models`** — the EXECUTOR, never
+  - `grok` → **one `mesh-exec:grok-executor` per entry of `.grok_models`** — the EXECUTOR, never
     a review-wrapper agent. Design review composes its own prompt in Step 4 and hands it over
     verbatim, while a review wrapper would resolve a `BASE_BRANCH`/`merge-base` diff and render
     `shared/code-review-prompt.md` instead: it would review the working tree and ignore the two
@@ -449,7 +449,7 @@ rc=0 → proceed; rc=2 → fresh-install hint + clean exit; rc=1 → surface the
     iterations 2..N and the Step 6 dispatch consumes it unconditionally, so in `default` mode it
     must actually hold something by then; an undefined name in a shell script raises an error
     under `set -u`, while in a prompt it raises nothing at all — the reader improvises.
-- For each model id in `.models` → spawn `claude-mesh:ext-claude-executor` with `MODEL=<id>`.
+- For each model id in `.models` → spawn `mesh-exec:ext-claude-executor` with `MODEL=<id>`.
 - **If HOST=grok and the preset `run_mode` is `team`: STOP** with `На Grok team mode не поддерживается — остановите запуск и используйте background.` Do not dispatch. Grok has no TeamCreate; always background.
 
 Remember this agent set for all subsequent iterations. Go directly to Step 6.
@@ -517,7 +517,7 @@ options:
   HOST=grok — for each CONFIGURED engine, in this order — claude, codex, gemini, grok:
     claude label: "Claude Code CLI"                 if "claude" NOT in defaults.design_review.builtin
                   "★ Claude Code CLI (recommended)" if "claude" in defaults.design_review.builtin
-    claude description: "внешнее ревью через claude -p (`claude-mesh:claude-executor`); never «свой Claude Code»"
+    claude description: "внешнее ревью через claude -p (`mesh-exec:claude-executor`); never «свой Claude Code»"
     other engines: same "<engine> CLI" / "★ <engine> CLI (recommended)" labels as on CC
 ```
 
@@ -675,7 +675,7 @@ options:
   - "Отмена"                   — exit the skill without dispatching
 ```
 
-On "Перевыбрать": clear the selection — `SELECTED_CLAUDE_MODELS`, `SELECTED_NATIVE_MODELS` and `SELECTED_GROK_MODELS` included, or the re-select leaves the previous round's models standing behind a new set of TYPES — and restart from Step 5.2. Loop guard: cap re-selects at 3; on the 4th, message "Слишком много перевыборов; запустите /claude-mesh:mesh-design-review заново" and exit. If the user deselected everything — no built-in left that can actually produce a reviewer (`native` with an empty `SELECTED_NATIVE_MODELS` still counts only while `native` remains selected — session-model fallback only when HOST_MODELS is non-empty; after degrade, native was removed from selected types and counts as nothing; `grok` with an empty `SELECTED_GROK_MODELS` counts as nothing, per Step 5.2.6) and no models — STOP with "ничего не выбрано для ревью".
+On "Перевыбрать": clear the selection — `SELECTED_CLAUDE_MODELS`, `SELECTED_NATIVE_MODELS` and `SELECTED_GROK_MODELS` included, or the re-select leaves the previous round's models standing behind a new set of TYPES — and restart from Step 5.2. Loop guard: cap re-selects at 3; on the 4th, message "Слишком много перевыборов; запустите /mesh-review:mesh-design-review заново" and exit. If the user deselected everything — no built-in left that can actually produce a reviewer (`native` with an empty `SELECTED_NATIVE_MODELS` still counts only while `native` remains selected — session-model fallback only when HOST_MODELS is non-empty; after degrade, native was removed from selected types and counts as nothing; `grok` with an empty `SELECTED_GROK_MODELS` counts as nothing, per Step 5.2.6) and no models — STOP with "ничего не выбрано для ревью".
 
 <!-- SYNC: this list is the twin of the prose enumeration at the head of Step 5 ("remember
      the resulting agent set"). Change both or neither. -->
@@ -727,11 +727,11 @@ spawn_subagent:
   prompt: "[composed prompt with PREVIOUS_DECISIONS, plus Do not edit files and the tooling constraint]"
 ```
 
-**HOST=grok — `claude`:** `claude-mesh:claude-executor` (never `general-purpose`, never `claude-code-reviewer`). `MODEL=<alias>` on the first line, `HOST_CLAUDE=1` forwarded through the executor (the agent always sends that named param; it is not a spawn field), `SUPERVISED_MODE: shell`. Name them `claude:<alias>` (`claude:opus`). Roster `claude/<alias>` (`claude/opus`). If `claude` selected and the list is empty: one executor, **no MODEL line** (CLI default); roster `claude/_default`. Do not pass spawn `model: opus`.
+**HOST=grok — `claude`:** `mesh-exec:claude-executor` (never `general-purpose`, never `claude-code-reviewer`). `MODEL=<alias>` on the first line, `HOST_CLAUDE=1` forwarded through the executor (the agent always sends that named param; it is not a spawn field), `SUPERVISED_MODE: shell`. Name them `claude:<alias>` (`claude:opus`). Roster `claude/<alias>` (`claude/opus`). If `claude` selected and the list is empty: one executor, **no MODEL line** (CLI default); roster `claude/_default`. Do not pass spawn `model: opus`.
 
 ```
 spawn_subagent:
-  subagent_type: claude-mesh:claude-executor
+  subagent_type: mesh-exec:claude-executor
   background: true
   description: "Design review via claude:<alias> (iter N)"
   prompt: "MODEL=<alias>
@@ -757,11 +757,11 @@ spawn_subagent, background: true:  # HOST=grok
     [agent-specific params]"
 ```
 
-**`claude-mesh:ext-claude-executor`** REQUIRES `MODEL=<id>` on the **FIRST non-blank line** of the prompt (it parses `^MODEL=(\S+)` and STOPs otherwise). Do NOT wrap it behind an `Execute this prompt via…` line — put MODEL first, then the wrapper. HOST=claude-code: Task. HOST=grok: `spawn_subagent` `background: true`; do not pass `DISPATCH_MODEL` unless it is in `HOST_MODELS`; never pass `opus` as spawn `model:`:
+**`mesh-exec:ext-claude-executor`** REQUIRES `MODEL=<id>` on the **FIRST non-blank line** of the prompt (it parses `^MODEL=(\S+)` and STOPs otherwise). Do NOT wrap it behind an `Execute this prompt via…` line — put MODEL first, then the wrapper. HOST=claude-code: Task. HOST=grok: `spawn_subagent` `background: true`; do not pass `DISPATCH_MODEL` unless it is in `HOST_MODELS`; never pass `opus` as spawn `model:`:
 ```
 Task tool:                         # HOST=claude-code
 spawn_subagent, background: true:  # HOST=grok
-  subagent_type: claude-mesh:ext-claude-executor
+  subagent_type: mesh-exec:ext-claude-executor
   description: "Design review via <id> (iter N)"
   prompt: "MODEL=<id>
     Execute this prompt via ext-claude-exec:
@@ -770,11 +770,11 @@ spawn_subagent, background: true:  # HOST=grok
     SUPERVISED_MODE: shell"
 ```
 
-**`claude-mesh:grok-executor`** takes `MODEL=<model>` on the **FIRST non-blank line** for the same reason: `agents/grok-executor.md:27` requires it there and the agent STOPs without it, so an `Execute this prompt via…` line above it would break the parse. Nothing checks that mechanically — the contract is prose the agent reads, which is exactly why the caller has to get it right. **One spawn per entry of `SELECTED_GROK_MODELS`**, and none at all when that list is empty. HOST=claude-code: Task. HOST=grok: `spawn_subagent` `background: true`; do not pass `DISPATCH_MODEL` unless it is in `HOST_MODELS`; never pass `opus` as spawn `model:`:
+**`mesh-exec:grok-executor`** takes `MODEL=<model>` on the **FIRST non-blank line** for the same reason: `agents/grok-executor.md:27` requires it there and the agent STOPs without it, so an `Execute this prompt via…` line above it would break the parse. Nothing checks that mechanically — the contract is prose the agent reads, which is exactly why the caller has to get it right. **One spawn per entry of `SELECTED_GROK_MODELS`**, and none at all when that list is empty. HOST=claude-code: Task. HOST=grok: `spawn_subagent` `background: true`; do not pass `DISPATCH_MODEL` unless it is in `HOST_MODELS`; never pass `opus` as spawn `model:`:
 ```
 Task tool:                         # HOST=claude-code
 spawn_subagent, background: true:  # HOST=grok
-  subagent_type: claude-mesh:grok-executor
+  subagent_type: mesh-exec:grok-executor
   description: "Design review via grok:<model> (iter N)"
   prompt: "MODEL=<model>
     Execute this prompt via grok-exec:
@@ -785,13 +785,13 @@ spawn_subagent, background: true:  # HOST=grok
 
 `<model>` is the bare catalog id (`grok-4.6`), never a `<provider>/<short>` pair like ext-claude's. Three spellings are in play here and none of them is interchangeable: the reviewer name and this `description` use `grok:<model>` (a COLON), the watcher roster below uses `grok/<model>` (a SLASH), and the run dir on disk is `runs/grok/<model>/`.
 
-**Grok-CLI executor dispatches and HOST=grok native dispatches carry the tooling constraint in their PROMPT.** In `/mesh-review` the `grok-code-review` skill appends that paragraph itself; design review bypasses that skill entirely and hands the executor (or native `general-purpose`) its own Step 4 prompt, so nothing adds the line unless you do. Grok reads `~/.claude/CLAUDE.md` and every installed claude-* plugin — `claude-mesh:mesh-design-review` is among the skills it can see — so without the paragraph it can answer a review request by launching an orchestration of its own, writing run dirs this session never dispatched. Append it verbatim as the LAST section of the composed prompt, for grok-executor **and** native:
+**Grok-CLI executor dispatches and HOST=grok native dispatches carry the tooling constraint in their PROMPT.** In `/mesh-review` the `grok-code-review` skill appends that paragraph itself; design review bypasses that skill entirely and hands the executor (or native `general-purpose`) its own Step 4 prompt, so nothing adds the line unless you do. Grok reads `~/.claude/CLAUDE.md` and every installed claude-* plugin — `mesh-review:mesh-design-review` is among the skills it can see — so without the paragraph it can answer a review request by launching an orchestration of its own, writing run dirs this session never dispatched. Append it verbatim as the LAST section of the composed prompt, for grok-executor **and** native:
 
 ```markdown
 ## Tooling constraint
 
 Do NOT invoke any skill or slash command, and do NOT delegate this review to another agent or
-orchestration. Names like `claude-mesh:mesh-design-review` may be visible in your environment;
+orchestration. Names like `mesh-review:mesh-design-review` may be visible in your environment;
 they are not part of this task. Read the documents and the code with your own file, search and
 shell tools, and answer with the review itself.
 ```
@@ -799,11 +799,11 @@ shell tools, and answer with the review itself.
 codex, gemini and ext-claude get no such paragraph: they cannot see those skills at all.
 
 Agent-specific parameters:
-- **`claude-mesh:codex-executor`** (built-in selected: `codex`): pass `MODEL={CODEX_MODEL}` / `REASONING_LEVEL={CODEX_REASONING_LEVEL}` ONLY when the user explicitly set them; otherwise omit both lines entirely — codex-exec resolves model/level from `config.yaml` (`codex.model` / `codex.reasoning_level`, fallbacks `gpt-5.5`/`xhigh`)
-- **`claude-mesh:gemini-executor`** (built-in selected: `gemini`): default settings
-- **`claude-mesh:grok-executor`** (built-in selected: `grok`; one per entry of `SELECTED_GROK_MODELS`): `MODEL=<model>` on line 1 (e.g. `MODEL=grok-4.6`) — the id comes from the config (`SELECTED_GROK_MODELS`, or `defaults.design_review.grok_models` in `default` mode), never invented here. Pass `REASONING_EFFORT={GROK_REASONING_EFFORT}` ONLY when the user explicitly set it; otherwise omit the line entirely — grok-exec resolves the effort for the model it runs from `config.yaml` (`grok.model_efforts[<model>]`, then the section-wide `grok.reasoning_effort`), and when both are unset the CLI's own default applies.
-- **`claude-mesh:ext-claude-executor`** (one per selected model id): `MODEL=<id>` on line 1 (e.g. `MODEL=zai/glm`, `MODEL=alibaba/qwen`, `MODEL=ollama/kimi`) — the model id comes from the config (`SELECTED_IDS`, or `defaults.design_review.models` in `default` mode), NOT a hardcoded provider profile.
-- **`claude-mesh:claude-executor`** (HOST=grok, built-in selected: `claude`; one per entry of `SELECTED_CLAUDE_MODELS`): `MODEL=<alias>` on line 1 (e.g. `MODEL=opus`) — empty list: omit the MODEL line. Always `HOST_CLAUDE=1` forwarded through the executor, always `SUPERVISED_MODE: shell`. Do not pass spawn `model: opus`.
+- **`mesh-exec:codex-executor`** (built-in selected: `codex`): pass `MODEL={CODEX_MODEL}` / `REASONING_LEVEL={CODEX_REASONING_LEVEL}` ONLY when the user explicitly set them; otherwise omit both lines entirely — codex-exec resolves model/level from `config.yaml` (`codex.model` / `codex.reasoning_level`, fallbacks `gpt-5.5`/`xhigh`)
+- **`mesh-exec:gemini-executor`** (built-in selected: `gemini`): default settings
+- **`mesh-exec:grok-executor`** (built-in selected: `grok`; one per entry of `SELECTED_GROK_MODELS`): `MODEL=<model>` on line 1 (e.g. `MODEL=grok-4.6`) — the id comes from the config (`SELECTED_GROK_MODELS`, or `defaults.design_review.grok_models` in `default` mode), never invented here. Pass `REASONING_EFFORT={GROK_REASONING_EFFORT}` ONLY when the user explicitly set it; otherwise omit the line entirely — grok-exec resolves the effort for the model it runs from `config.yaml` (`grok.model_efforts[<model>]`, then the section-wide `grok.reasoning_effort`), and when both are unset the CLI's own default applies.
+- **`mesh-exec:ext-claude-executor`** (one per selected model id): `MODEL=<id>` on line 1 (e.g. `MODEL=zai/glm`, `MODEL=alibaba/qwen`, `MODEL=ollama/kimi`) — the model id comes from the config (`SELECTED_IDS`, or `defaults.design_review.models` in `default` mode), NOT a hardcoded provider profile.
+- **`mesh-exec:claude-executor`** (HOST=grok, built-in selected: `claude`; one per entry of `SELECTED_CLAUDE_MODELS`): `MODEL=<alias>` on line 1 (e.g. `MODEL=opus`) — empty list: omit the MODEL line. Always `HOST_CLAUDE=1` forwarded through the executor, always `SUPERVISED_MODE: shell`. Do not pass spawn `model: opus`.
 
 **Every executor template carries `SUPERVISED_MODE: shell` — never drop it.** Without it the `*-exec` skills default to `none`, which means no `shared/watchdog.sh`: no stall detection, no restart when a provider tears the stream mid-response, and no `watchdog.log` — the file whose `cleanup` event tells the watch loop below that a run has stopped, and whose `alive` heartbeat tells it the run is still alive. Design review never set this until 2026-07-27, so supervision was a coin flip: 42 of 223 archived runs got a watchdog, against 242 of 255 on the `/mesh-review` path where it is hardcoded. On 2026-07-26 none of six did, four executors died mid-stream, and nothing noticed for 38 minutes. On 2026-07-27 four of five died again and only recovered because the executor agents improvised their own retries.
 
@@ -966,14 +966,14 @@ Only include sections for agents that were actually selected and completed succe
 
 ### Step 8: Parse Issues via Discussion Agent
 
-**HOST=claude-code:** Use Task tool to launch the `claude-mesh:review-discussion` agent (plugin agent — namespaced; ported in Task 17). Apply the same **Dispatch model** rule as Step 6: add `model: "<DISPATCH_MODEL>"` when `DISPATCH_MODEL` is non-empty, otherwise omit `model:`.
+**HOST=claude-code:** Use Task tool to launch the `mesh-review:review-discussion` agent (plugin agent — namespaced; ported in Task 17). Apply the same **Dispatch model** rule as Step 6: add `model: "<DISPATCH_MODEL>"` when `DISPATCH_MODEL` is non-empty, otherwise omit `model:`.
 
-**HOST=grok:** spawn_subagent claude-mesh:review-discussion background true. Pass DISPATCH_MODEL only if that slug is in HOST_MODELS. Never pass `opus` as spawn `model:`.
+**HOST=grok:** spawn_subagent mesh-review:review-discussion background true. Pass DISPATCH_MODEL only if that slug is in HOST_MODELS. Never pass `opus` as spawn `model:`.
 
 ```
 Task tool:                         # HOST=claude-code
 spawn_subagent, background: true:  # HOST=grok
-  subagent_type: claude-mesh:review-discussion
+  subagent_type: mesh-review:review-discussion
   description: "Parse review issues (iter N)"
   prompt: "Parse and analyze design review issues:
     DESIGN_PATH: [design path]
@@ -1080,8 +1080,8 @@ If no files were modified in Step 10, skip this commit.
 If `disputed` is empty, proceed to Step 13.
 
 **Autodecide mode.** If `AUTODECIDE` is true (Step 5) **or the user has already invoked**
-`/claude-mesh:auto-decide-disputed` in this session — its state S3 arms the mode with no argument
-passed — do NOT run the interactive loop below: invoke `/claude-mesh:auto-decide-disputed` through
+`/mesh-review:auto-decide-disputed` in this session — its state S3 arms the mode with no argument
+passed — do NOT run the interactive loop below: invoke `/mesh-review:auto-decide-disputed` through
 the Skill tool now and follow it for the whole disputed queue, then come back for the "After the
 loop" paragraph at the end of 12.c before Step 13.
 
@@ -1165,11 +1165,11 @@ Display intro (interactive mode):
      `commands/auto-decide-disputed.md` Step 4. Change both or neither. -->
 - **In `autodecide` mode neither branch above applies** — not the waiting one and not the
   single-adequate-variant one. Every remaining disputed issue is decided by
-  `/claude-mesh:auto-decide-disputed` and recorded in `answers` as
+  `/mesh-review:auto-decide-disputed` and recorded in `answers` as
   `{issue, status: "new-autodecide", answer: "Вариант X (autodecide)", action: "<what changed>",
   confidence: "уверенно" | "под вопросом (<what was missing>)", commit: "<short SHA>" | "—"}` —
   Step 13 renders it and Step 15 counts it. `commit` is `«—»` exactly when the decision was the
-  no-change variant («Оставить как есть», spelled «не исправлять» in `/claude-mesh:mesh-review`),
+  no-change variant («Оставить как есть», spelled «не исправлять» in `/mesh-review:mesh-review`),
   which produces no edit and no commit. The stop check still applies, and running it is this
   bullet's job: «стоп» during the run sets `stop = true` — Step 9's flag, whose only other
   assignment lives in the waiting branch this mode replaces — ends the run, and records the
@@ -1267,13 +1267,13 @@ see Step 15:
 **If nothing was produced at all** (no auto-fixes, no disputed, no iter file written — unlikely), skip the commit.
 
 **In `autodecide` mode the document edits are already committed** — one commit per decision, made
-by `/claude-mesh:auto-decide-disputed`. This step then stages only the iteration file and the
+by `/mesh-review:auto-decide-disputed`. This step then stages only the iteration file and the
 merged review file, and its message becomes `docs: review iter N — log (<TOPIC>)`: naming
 decisions in a commit that carries none would misdescribe the history, and the decisions are in
 their own commits beside it, findable with `git log --grep=auto-decide-disputed`.
 
 **Stage only those two if the tree is in fact clean of disputed-phase edits.** A user who cuts into
-the run to pick a variant themselves — `/claude-mesh:auto-decide-disputed` Step 3 allows it
+the run to pick a variant themselves — `/mesh-review:auto-decide-disputed` Step 3 allows it
 explicitly — has that choice applied by the ordinary handler, which makes no decision commit of its
 own; Step 13 then records the issue as `Обсуждено с пользователем` with a `**Действие:**` naming a
 change nothing in git carries. So look at `git status` before staging: if DESIGN_PATH or PLAN_PATH
@@ -1283,12 +1283,12 @@ settle-the-tree already uses for exactly this content — `docs: review iter N �
 human/machine boundary stays visible in the history. **Exclude every path a failed decision commit
 left changed** — the set the command names when it hands back, its own files plus anything a hook
 touched on the way to failing. A hook's collateral rewrite of DESIGN_PATH is not the decision's
-file, and committing it here would record a failure as a decision. `/claude-mesh:mesh-review` Step 6.5 carries the
+file, and committing it here would record a failure as a decision. `/mesh-review:mesh-review` Step 6.5 carries the
 same guard in its own form.
 
 **If the command was invoked only after this step already ran** — «стоп» ended Step 12, Steps 13–14
 committed those issues as `Отложено (стоп)`, and the user then handed the deferred queue to
-`/claude-mesh:auto-decide-disputed` (its state S4) — this step does not run again and does not cover
+`/mesh-review:auto-decide-disputed` (its state S4) — this step does not run again and does not cover
 those decisions. **The command closes the record itself** — it appends a `## Дополнение` block to
 the iteration file this step committed, supersedes the superseded records, fixes `Статистика` and
 commits that file on its own. The procedure is written once, in
@@ -1323,14 +1323,14 @@ Options:
 
 **Based on user response:**
 
-- **"Новая итерация":** Execute `/claude-mesh:design-review-fresh-session` via the Skill tool
+- **"Новая итерация":** Execute `/mesh-review:design-review-fresh-session` via the Skill tool
   (it generates the prompt for the next iteration and knows this may run in a sandbox), then
   go to Step 16. If that command does not resolve — an older plugin in this environment —
   warn that the plugin needs an update for the review-generator flow and fall back to
-  `/claude-mesh:continue-plan-fresh-session` **with an instruction to run
-  `/claude-mesh:mesh-design-review` in the new session**, as before this feature — then go to
+  `/session-relay:continue-plan-fresh-session` **with an instruction to run
+  `/mesh-review:mesh-design-review` in the new session**, as before this feature — then go to
   Step 16 either way
-- **"Остановиться и начать работу":** Execute `/claude-mesh:continue-plan-fresh-session` skill via Skill tool, then go to Step 16
+- **"Остановиться и начать работу":** Execute `/session-relay:continue-plan-fresh-session` skill via Skill tool, then go to Step 16
 
 ### Step 16: Present Final Summary
 
@@ -1376,24 +1376,24 @@ iteration file:
 | HOST=grok preset `run_mode: team` | Already STOP in Step 5.1: `На Grok team mode не поддерживается — остановите запуск и используйте background.` Do not dispatch |
 | Silent wrapper + `REAL` on HOST=grok | Read `output.txt` yourself (primary path). No SendMessage |
 | All agents fail | Show error, save progress, allow retry |
-| `claude-mesh:review-discussion` fails | Show error, save progress |
+| `mesh-review:review-discussion` fails | Show error, save progress |
 | User interrupts | Save current progress to iter file |
 
 ## Example Usage
 
 **Start iterative review** (commands/skills are namespaced — bare names do not resolve on CC 2.1.156):
 ```
-/claude-mesh:mesh-design-review
+/mesh-review:mesh-design-review
 ```
 
 **Use the configured default reviewer set (skip selection UI):**
 ```
-/claude-mesh:mesh-design-review default
+/mesh-review:mesh-design-review default
 ```
 
 **With explicit paths:**
 ```
-/claude-mesh:mesh-design-review DESIGN_PATH=docs/superpowers/specs/2026-01-28-auth-design.md
+/mesh-review:mesh-design-review DESIGN_PATH=docs/superpowers/specs/2026-01-28-auth-design.md
 ```
 
 **Continue from previous session:**

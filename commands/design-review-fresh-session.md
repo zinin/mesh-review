@@ -1,6 +1,6 @@
 ---
 name: design-review-fresh-session
-description: Generate a prompt for reviewing the current design + plan via /claude-mesh:mesh-design-review in a fresh Claude Code session, including one that runs in a sandbox
+description: Generate a prompt for reviewing the current design + plan via /mesh-review:mesh-design-review in a fresh Claude Code session, including one that runs in a sandbox
 ---
 
 # Fresh-Session Design-Review Prompt Generator
@@ -27,7 +27,7 @@ description: Generate a prompt for reviewing the current design + plan via /clau
 ## Task
 
 Generate the prompt for a NEW Claude Code session whose job is to review the current design and
-plan through `/claude-mesh:mesh-design-review` — **not** to implement them.
+plan through `/mesh-review:mesh-design-review` — **not** to implement them.
 
 Arguments, optional, any order: `DESIGN_PATH=`, `PLAN_PATH=`, `TOPIC=`.
 
@@ -86,7 +86,7 @@ decision 2 of the design exists to prevent:
 ````
 ## TASK
 
-Review the design and plan for <feature> through `/claude-mesh:mesh-design-review`.
+Review the design and plan for <feature> through `/mesh-review:mesh-design-review`.
 Do not implement anything.
 
 ## DO NOT
@@ -117,10 +117,10 @@ mesh-design-review commits its own auto-fixes and its iteration log.
 
 ```bash
 PF="./skills/shared/preflight-env.sh"
-[ -f "$PF" ] || [ -z "${GROK_SESSION_ID:-}" ] || PF="$(find "$HOME"/.grok/installed-plugins -path '*claude-mesh*/skills/shared/preflight-env.sh' 2>/dev/null | sort -V | tail -1)" || true
-[ -f "$PF" ] || PF="$(find "$HOME"/.claude/plugins -path '*claude-mesh*/skills/shared/preflight-env.sh' 2>/dev/null | sort -V | tail -1)" || true
-[ -f "$PF" ] || PF="$(find "$HOME"/.grok/plugins -path '*claude-mesh*/skills/shared/preflight-env.sh' 2>/dev/null | sort -V | tail -1)" || true
-[ -f "$PF" ] || { echo "preflight-env.sh not found — older claude-mesh here; expected degradation, NOT a broken environment"; exit 0; }
+[ -f "$PF" ] || [ -z "${GROK_SESSION_ID:-}" ] || PF="$(find "$HOME"/.grok/installed-plugins -path '*mesh-exec*/skills/shared/preflight-env.sh' 2>/dev/null | sort -V | tail -1)" || true
+[ -f "$PF" ] || PF="$(find "$HOME"/.claude/plugins -path '*mesh-exec*/skills/shared/preflight-env.sh' 2>/dev/null | sort -V | tail -1)" || true
+[ -f "$PF" ] || PF="$(find "$HOME"/.grok/plugins -path '*mesh-exec*/skills/shared/preflight-env.sh' 2>/dev/null | sort -V | tail -1)" || true
+[ -f "$PF" ] || { echo "preflight-env.sh not found — no mesh-exec here; expected degradation, NOT a broken environment"; exit 0; }
 bash "$PF"
 ```
 
@@ -146,7 +146,7 @@ config section, but the review skills refuse to start without a usable config.ya
 
 ## WHEN THE USER SAYS GO
 
-Invoke `/claude-mesh:mesh-design-review DESIGN_PATH=<DESIGN_PATH> PLAN_PATH=<PLAN_PATH> TOPIC=<TOPIC>`
+Invoke `/mesh-review:mesh-design-review DESIGN_PATH=<DESIGN_PATH> PLAN_PATH=<PLAN_PATH> TOPIC=<TOPIC>`
 and select only reviewers the preflight marked available. The two halves of the table answer
 different questions, so read both: **`SUMMARY available` decides eligibility** — a reviewer
 absent from that line cannot be selected whatever its own row says, because a row reports

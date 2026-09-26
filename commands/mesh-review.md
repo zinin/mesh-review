@@ -14,10 +14,10 @@ Launch multiple external code review agents in parallel, collect and deduplicate
   `default`. Bind it and carry it to every reviewer per the **Base branch** rule in Step 5a.
 - `autodecide` — decide every disputed issue automatically instead of waiting for an answer: the
   same full analysis, plus an explicit self-check, then your own recommendation applied. Optional,
-  orthogonal to `default` and `BASE_BRANCH=`, order-independent — `/claude-mesh:mesh-review default
-  autodecide` is a fully unattended run, `/claude-mesh:mesh-review autodecide` picks reviewers
+  orthogonal to `default` and `BASE_BRANCH=`, order-independent — `/mesh-review:mesh-review default
+  autodecide` is a fully unattended run, `/mesh-review:mesh-review autodecide` picks reviewers
   interactively and only the disputed phase runs unattended. The protocol lives in
-  `/claude-mesh:auto-decide-disputed`; Step 6.4 hands over to it.
+  `/mesh-review:auto-decide-disputed`; Step 6.4 hands over to it.
 
 Without `BASE_BRANCH` each review skill auto-detects the base itself — `git symbolic-ref
 refs/remotes/origin/HEAD`, falling back to `master`. Passing it matters exactly where that guess
@@ -48,16 +48,16 @@ substitute the literal `grok` or `claude-code` you echoed.
 - Read `defaults.code_review` via `"$LOADER" get-defaults code_review` and parse with jq (`.builtin`, `.claude_models`, `.native_models`, `.grok_models`, `.models`, `.run_mode`, `.grok_degraded`); read the runtime block ONCE via `RUNTIME_JSON=$("$LOADER" get-runtime)` and pull BOTH fields from that single JSON — `DEFAULT_RUN_MODE=$(echo "$RUNTIME_JSON" | jq -r '.default_run_mode')` and `DISPATCH_MODEL=$(echo "$RUNTIME_JSON" | jq -r '.dispatch_model // empty')` — then `echo "DISPATCH_MODEL=$DISPATCH_MODEL"` to surface it (empty = inherit the session model on dispatch). Bind `GLOBAL_SEC=$(echo "$RUNTIME_JSON" | jq -r '.timeouts.global_sec // 3600')` from the same JSON and `echo "GLOBAL_SEC=$GLOBAL_SEC"`: the HOST=grok wait in Step 5a stops at that many seconds after `DISPATCH_EPOCH`, and a deadline nothing has read is no deadline. (iter-3 CONCERN-1 — these come through the loader, not raw-yaml reads; `get-runtime` validates the runtime block, so a charset-invalid `dispatch_model` fast-fails here.)
 - Read via the loader with the same rc=2/rc=1 distinction as Step 1 (iter-3 CRITICAL-3) — rc=2 ⇒ print the copy-config hint and exit cleanly; rc=1 ⇒ surface the validator stderr verbatim and stop — do NOT edit config.yaml (user-owned, agents never edit it).
 - If `defaults.code_review` not configured → STOP with error:
-  `defaults.code_review not configured in config.yaml. Use /claude-mesh:mesh-review without argument or add the preset.`
+  `defaults.code_review not configured in config.yaml. Use /mesh-review:mesh-review without argument or add the preset.`
 - Spawn all reviewers per preset:
   - `claude` in `defaults.code_review.builtin` → expand over `defaults.code_review.claude_models`:
     - HOST=claude-code, list non-empty → **one `general-purpose` reviewer per entry**, each dispatched with `model: "<entry>"`. This model **overrides** `DISPATCH_MODEL` for these reviewers. Name them `claude:<model>` everywhere downstream.
     <!-- SYNC: the fallback rule in the next bullet is ONE rule living in four places — this file's Step 2.4 ("Empty selection is not an error"), and `skills/mesh-design-review/SKILL.md` Step 5.1 / Step 5.2.5. Change all four or none. -->
     - HOST=claude-code, list absent/empty → exactly **one** reviewer named `claude`, dispatched with `model: "<DISPATCH_MODEL>"` when that is non-empty, otherwise with no `model:` at all (inherits the session model). This is the behaviour from before this feature and stays the default.
-    - HOST=grok: one `claude-mesh:claude-code-reviewer` per entry of `claude_models` with `MODEL=` per alias (never `general-purpose` with `model: opus`). Empty/absent list → one reviewer, **no MODEL line** (CLI default, `claude -p` without `-m`). Do not pass spawn `model: opus`. Name them `claude:<model>` (or `claude` in the empty-list fallback).
+    - HOST=grok: one `mesh-review:claude-code-reviewer` per entry of `claude_models` with `MODEL=` per alias (never `general-purpose` with `model: opus`). Empty/absent list → one reviewer, **no MODEL line** (CLI default, `claude -p` without `-m`). Do not pass spawn `model: opus`. Name them `claude:<model>` (or `claude` in the empty-list fallback).
   - **Bind `SELECTED_CLAUDE_MODELS` to that resolved list here** (it is `defaults.code_review.claude_models`, or empty in the fallback case). Step 5a and Step 5b both dispatch "one Task per entry of `SELECTED_CLAUDE_MODELS`" **unconditionally** — the interactive path fills it in Step 2.4, and without this line the variable would simply be undefined in `default` mode. An undefined name in a shell script raises an error under `set -u`; in a prompt it raises nothing at all — the reader improvises, and `default` mode quietly dispatches one reviewer instead of N.
   - **On HOST=claude-code, `native` in builtin collapses to this same host set.** Treat `native` as `claude` for host reviewers — `native ∪ claude` is one set sourced from `claude_models` (and the empty-list fallback above). Ignore `.native_models`. **Bind `SELECTED_NATIVE_MODELS` to the empty list** — on Claude Code the host set is `SELECTED_CLAUDE_MODELS`; native bullets must not appear on confirm.
-  - **On HOST=grok, `native` is a separate type.** `claude` in builtin is the Claude Code CLI (`claude-mesh:claude-code-reviewer`), not host slugs. If `native` is not in `.builtin`: **bind `SELECTED_NATIVE_MODELS` to the empty list**. If `.native_models` is non-empty and `native` is not in builtin, the loader already rejected the file.
+  - **On HOST=grok, `native` is a separate type.** `claude` in builtin is the Claude Code CLI (`mesh-review:claude-code-reviewer`), not host slugs. If `native` is not in `.builtin`: **bind `SELECTED_NATIVE_MODELS` to the empty list**. If `.native_models` is non-empty and `native` is not in builtin, the loader already rejected the file.
   - On HOST=grok, this `default` path skipped Step 1, so run the live catalog probe here (same fence as Step 1; substitute the literal `grok` for `$HOST`). Then:
     - **If `claude` was requested and `HAS_CLAUDE_CLI=0`: print `claude: CLI не найден — claude-ревьюер не запущен; остальные движки работают.`, bind `SELECTED_CLAUDE_MODELS` empty and remove `claude` from selected types.** Design §7 requires a spoken degrade here, exactly like `native_degraded` below and `grok_degraded` above. Without it the reviewer is dispatched, dies inside `skills/claude-code-review/SKILL.md` on its own `command -v claude` STOP, leaves no run dir, and is scored `FLIP` — a verdict that prescribes a re-dispatch which fails identically and spends the whole `max_redispatch` budget misdiagnosing a missing binary as a wrapper that self-reviewed. `HAS_CLAUDE_CLI` is probed in the Step 1 fence and until now was read only by the interactive pages.
     - If `native` was requested and `HOST_MODELS` is empty: print `native не запущен; остальные работают.` **bind `SELECTED_NATIVE_MODELS` empty**, and **remove native from selected types** (`native_degraded` spoken, not a loader flag). Empty `SELECTED_NATIVE_MODELS` is then "no native reviewers", not omit-`model:`.
@@ -91,11 +91,13 @@ Use `config-loader.sh` instead of raw `yq` so validation runs the same way every
 # name without the braces: it would be substituted here too.) Fallback for harnesses that do
 # not substitute: a VERSION-sorted glob — plain `find | head -1` is directory order and was
 # observed picking a stale cached 0.4.0 over the installed 0.4.2.
-LOADER="${CLAUDE_PLUGIN_ROOT}/skills/shared/config-loader.sh"
-[ -f "$LOADER" ] || [ -z "${GROK_SESSION_ID:-}" ] || LOADER="$(find "$HOME"/.grok/installed-plugins -path '*claude-mesh*/skills/shared/config-loader.sh' 2>/dev/null | sort -V | tail -1)" || true
-[ -f "$LOADER" ] || LOADER="$(find "$HOME"/.claude/plugins -path '*claude-mesh*/skills/shared/config-loader.sh' 2>/dev/null | sort -V | tail -1)" || true
-[ -f "$LOADER" ] || LOADER="$(find "$HOME"/.grok/plugins -path '*claude-mesh*/skills/shared/config-loader.sh' 2>/dev/null | sort -V | tail -1)" || true
-[ -f "$LOADER" ] || { echo "config-loader.sh not found under ~/.claude/plugins or ~/.grok/plugins (is claude-mesh installed?)" >&2; exit 1; }
+FINDER="${CLAUDE_PLUGIN_ROOT}/skills/shared/find-mesh-exec.sh"
+[ -f "$FINDER" ] || [ -z "${GROK_SESSION_ID:-}" ] || FINDER="$(find "$HOME"/.grok/installed-plugins -path '*mesh-review*/skills/shared/find-mesh-exec.sh' 2>/dev/null | sort -V | tail -1)" || true
+[ -f "$FINDER" ] || FINDER="$(find "$HOME"/.claude/plugins -path '*mesh-review*/skills/shared/find-mesh-exec.sh' 2>/dev/null | sort -V | tail -1)" || true
+[ -f "$FINDER" ] || FINDER="$(find "$HOME"/.grok/plugins -path '*mesh-review*/skills/shared/find-mesh-exec.sh' 2>/dev/null | sort -V | tail -1)" || true
+[ -f "$FINDER" ] || { echo "find-mesh-exec.sh not found (is mesh-review installed?)" >&2; exit 1; }
+MESH_EXEC="$(bash "$FINDER")" || exit 1
+LOADER="$MESH_EXEC/skills/shared/config-loader.sh"
 # iter-3 CRITICAL-3: a bare $() swallows the loader exit code. Probe once with explicit rc
 # capture so rc=2 (config.yaml not created yet — fresh install) is NOT misreported as
 # rc=1 (config invalid). Distinct handling per design §6.6 / iter-2 CONCERN-11.
@@ -103,9 +105,9 @@ LOADER_ERR=$(mktemp) || { echo "STOP: mktemp failed" >&2; exit 1; }
 HAS_CODEX=$("$LOADER" get-flag has_codex 2>"$LOADER_ERR"); LRC=$?
 case "$LRC" in
   0) ;;
-  # Name the dir the loader actually reads — a literal placeholder here would be substituted
-  # by the harness and, under a --plugin-dir load, would point at the wrong data dir.
-  2) echo "config.yaml ещё не создан. Скопируйте config.example.yaml в $("$LOADER" data-dir)/config.yaml, заполните токены и повторите /claude-mesh:mesh-review."; rm -f "$LOADER_ERR"; exit 0 ;;
+  # Name the file the loader actually reads, and pass its stderr on: when the old claude-mesh
+  # config is still in place, the loader prints the exact command that moves it.
+  2) cat "$LOADER_ERR" >&2; echo "config.yaml ещё не создан. Скопируйте config.example.yaml в $("$LOADER" config-path), заполните токены и повторите /mesh-review:mesh-review."; rm -f "$LOADER_ERR"; exit 0 ;;
   *) echo "config.yaml невалиден:" >&2; cat "$LOADER_ERR" >&2; rm -f "$LOADER_ERR"; exit 1 ;;
 esac
 rm -f "$LOADER_ERR"
@@ -316,7 +318,7 @@ options:
   HOST=grok — for each CONFIGURED engine, in this order — claude, codex, gemini, grok:
     claude label: "Claude Code CLI"                 if "claude" NOT in defaults.code_review.builtin
                   "★ Claude Code CLI (recommended)" if "claude" in defaults.code_review.builtin
-    claude description: "внешнее ревью через claude -p (`claude-mesh:claude-code-reviewer`); never «свой Claude Code»"
+    claude description: "внешнее ревью через claude -p (`mesh-review:claude-code-reviewer`); never «свой Claude Code»"
     other engines: same "<engine> CLI" / "★ <engine> CLI (recommended)" labels as on CC
 ```
 
@@ -411,11 +413,13 @@ Build `CLAUDE_DEFAULT_IDS` from the preset — **rc-aware, and never through a p
 # Same resolution as Step 1 — Q1's AskUserQuestion sits between that fence and this one, so
 # this Bash call runs in a FRESH shell where $LOADER no longer exists. Without re-resolving
 # it, `$("" get-defaults …)` fails and the `||` below misreports a valid config as invalid.
-LOADER="${CLAUDE_PLUGIN_ROOT}/skills/shared/config-loader.sh"
-[ -f "$LOADER" ] || [ -z "${GROK_SESSION_ID:-}" ] || LOADER="$(find "$HOME"/.grok/installed-plugins -path '*claude-mesh*/skills/shared/config-loader.sh' 2>/dev/null | sort -V | tail -1)" || true
-[ -f "$LOADER" ] || LOADER="$(find "$HOME"/.claude/plugins -path '*claude-mesh*/skills/shared/config-loader.sh' 2>/dev/null | sort -V | tail -1)" || true
-[ -f "$LOADER" ] || LOADER="$(find "$HOME"/.grok/plugins -path '*claude-mesh*/skills/shared/config-loader.sh' 2>/dev/null | sort -V | tail -1)" || true
-[ -f "$LOADER" ] || { echo "config-loader.sh not found" >&2; exit 1; }
+FINDER="${CLAUDE_PLUGIN_ROOT}/skills/shared/find-mesh-exec.sh"
+[ -f "$FINDER" ] || [ -z "${GROK_SESSION_ID:-}" ] || FINDER="$(find "$HOME"/.grok/installed-plugins -path '*mesh-review*/skills/shared/find-mesh-exec.sh' 2>/dev/null | sort -V | tail -1)" || true
+[ -f "$FINDER" ] || FINDER="$(find "$HOME"/.claude/plugins -path '*mesh-review*/skills/shared/find-mesh-exec.sh' 2>/dev/null | sort -V | tail -1)" || true
+[ -f "$FINDER" ] || FINDER="$(find "$HOME"/.grok/plugins -path '*mesh-review*/skills/shared/find-mesh-exec.sh' 2>/dev/null | sort -V | tail -1)" || true
+[ -f "$FINDER" ] || { echo "find-mesh-exec.sh not found (is mesh-review installed?)" >&2; exit 1; }
+MESH_EXEC="$(bash "$FINDER")" || exit 1
+LOADER="$MESH_EXEC/skills/shared/config-loader.sh"
 # NOT the first get-defaults call on the interactive path any more — Step 1 reads the preset
 # for Q1's and Step 2.1's ★ markers, so validate_defaults has already run and a bad
 # `claude_models` has already surfaced there. This read stands for the fresh-shell reason
@@ -469,11 +473,13 @@ reason Step 2.4 spells out (this Bash call runs in a fresh shell; `$LOADER` must
 re-resolved):
 
 ```bash
-LOADER="${CLAUDE_PLUGIN_ROOT}/skills/shared/config-loader.sh"
-[ -f "$LOADER" ] || [ -z "${GROK_SESSION_ID:-}" ] || LOADER="$(find "$HOME"/.grok/installed-plugins -path '*claude-mesh*/skills/shared/config-loader.sh' 2>/dev/null | sort -V | tail -1)" || true
-[ -f "$LOADER" ] || LOADER="$(find "$HOME"/.claude/plugins -path '*claude-mesh*/skills/shared/config-loader.sh' 2>/dev/null | sort -V | tail -1)" || true
-[ -f "$LOADER" ] || LOADER="$(find "$HOME"/.grok/plugins -path '*claude-mesh*/skills/shared/config-loader.sh' 2>/dev/null | sort -V | tail -1)" || true
-[ -f "$LOADER" ] || { echo "config-loader.sh not found" >&2; exit 1; }
+FINDER="${CLAUDE_PLUGIN_ROOT}/skills/shared/find-mesh-exec.sh"
+[ -f "$FINDER" ] || [ -z "${GROK_SESSION_ID:-}" ] || FINDER="$(find "$HOME"/.grok/installed-plugins -path '*mesh-review*/skills/shared/find-mesh-exec.sh' 2>/dev/null | sort -V | tail -1)" || true
+[ -f "$FINDER" ] || FINDER="$(find "$HOME"/.claude/plugins -path '*mesh-review*/skills/shared/find-mesh-exec.sh' 2>/dev/null | sort -V | tail -1)" || true
+[ -f "$FINDER" ] || FINDER="$(find "$HOME"/.grok/plugins -path '*mesh-review*/skills/shared/find-mesh-exec.sh' 2>/dev/null | sort -V | tail -1)" || true
+[ -f "$FINDER" ] || { echo "find-mesh-exec.sh not found (is mesh-review installed?)" >&2; exit 1; }
+MESH_EXEC="$(bash "$FINDER")" || exit 1
+LOADER="$MESH_EXEC/skills/shared/config-loader.sh"
 GD_ERR=$(mktemp) || { echo "STOP: mktemp failed" >&2; exit 1; }
 CR_DEFAULTS=$("$LOADER" get-defaults code_review 2>"$GD_ERR") \
     || { echo "config.yaml невалиден (defaults.code_review):" >&2; cat "$GD_ERR" >&2; rm -f "$GD_ERR"; exit 1; }
@@ -605,7 +611,7 @@ options:
   - "Отмена"                  — exit /mesh-review without dispatching
 ```
 
-On "Перевыбрать": clear SELECTED_IDS, restart Step 3 pagination from page 1 with the same defaults set. Loop guard: cap re-selects at 3 to prevent infinite ping-pong; on the 4th re-select, message "Слишком много перевыборов; начните /claude-mesh:mesh-review заново" and exit.
+On "Перевыбрать": clear SELECTED_IDS, restart Step 3 pagination from page 1 with the same defaults set. Loop guard: cap re-selects at 3 to prevent infinite ping-pong; on the 4th re-select, message "Слишком много перевыборов; начните /mesh-review:mesh-review заново" and exit.
 
 Skip Step 3.5 if `len(SELECTED_IDS) == 0` (user deselected everything — surface that as STOP "no models selected").
 
@@ -623,7 +629,7 @@ options:
   - "Team of reviewers"
 ```
 
-Since AskUserQuestion lacks preSelected, the recommended choice gets a "(Recommended)" suffix in its `label` (matches the convention used in other claude-mesh AskUserQuestion sites).
+Since AskUserQuestion lacks preSelected, the recommended choice gets a "(Recommended)" suffix in its `label` (matches the convention used in other mesh-review AskUserQuestion sites).
 
 ## Step 5a: Background tasks mode
 
@@ -661,9 +667,9 @@ named in their prompt sentence instead. Argument absent → change nothing; ever
 
 **HOST=claude-code — Task dispatch.** For each builtin reviewer:
 - claude: `subagent_type: "general-purpose"` (built-in — NOT namespaced), prompt invokes `superpowers:requesting-code-review` skill. **One Task per entry of `SELECTED_CLAUDE_MODELS`**, each carrying `model: "<entry>"`; in the fallback case exactly one Task per the Dispatch-model rule above. All of them get the same prompt — only the model differs. With `BASE_BRANCH` given, the prompt names it: `… review the changes on this branch against base <branch> …`.
-- codex: `subagent_type: "claude-mesh:codex-code-reviewer"`, prompt: `Review the changes for production readiness` (with the `BASE_BRANCH=<branch> ` prefix when the argument was given)
-- gemini: `subagent_type: "claude-mesh:gemini-code-reviewer"`, prompt: `Review the changes for production readiness` (same prefix rule)
-- grok: `subagent_type: "claude-mesh:grok-code-reviewer"`, **one Task per entry of `SELECTED_GROK_MODELS`** — and none at all when that list is empty. Write `MODEL=<entry>` ALONE on the FIRST line and, when the `BASE_BRANCH` argument was given, `BASE_BRANCH=<branch>` on the line directly under it:
+- codex: `subagent_type: "mesh-review:codex-code-reviewer"`, prompt: `Review the changes for production readiness` (with the `BASE_BRANCH=<branch> ` prefix when the argument was given)
+- gemini: `subagent_type: "mesh-review:gemini-code-reviewer"`, prompt: `Review the changes for production readiness` (same prefix rule)
+- grok: `subagent_type: "mesh-review:grok-code-reviewer"`, **one Task per entry of `SELECTED_GROK_MODELS`** — and none at all when that list is empty. Write `MODEL=<entry>` ALONE on the FIRST line and, when the `BASE_BRANCH` argument was given, `BASE_BRANCH=<branch>` on the line directly under it:
 
   ```
   MODEL=<entry>
@@ -674,9 +680,9 @@ named in their prompt sentence instead. Argument absent → change nothing; ever
   Without that argument, drop the middle line: the prompt is `MODEL=<entry>` then `Review the changes for production readiness`. Do **NOT** collapse this into one line starting with `BASE_BRANCH=` — that is the one shape grok's agent is written to reject, and the ext-claude bullet below now takes the same two-line shape for the same reason. Its contract is prose an agent reads, not a regex: `agents/grok-code-reviewer.md:26` ("MODEL is REQUIRED on the first line") and `:30-31` (a `BASE_BRANCH=<branch>` line "which the caller writes directly under `MODEL=`"). Nothing parses this prompt mechanically, which is precisely why the caller has to get it right — an agent reading `BASE_BRANCH=` at the head of the first line either stops with its `ERROR: MODEL parameter is required on first line` or forwards something it guessed at, and neither outcome is a review. `<entry>` is the bare catalog id (`grok-4.6`), never a `<provider>/<short>` pair. `MODEL=` is a parameter, exactly as for ext-claude; it is not review content, so the CRITICAL rule below still forbids inlining scope or diff.
 
 For each selected model id:
-- `subagent_type: "claude-mesh:ext-claude-code-reviewer"`, prompt: `MODEL=<id>` on its own FIRST line, then `BASE_BRANCH=<branch>` directly under it when there is a base branch to name, then `Review the changes for production readiness`. Without a base branch, drop the middle line. The one-line `BASE_BRANCH=<branch> MODEL=<id> …` form this bullet used to prescribe put `BASE_BRANCH=` at the head of the first line, against `agents/ext-claude-code-reviewer.md`'s own requirement that MODEL be there — it worked in practice, but only because every agent so far read past it
+- `subagent_type: "mesh-review:ext-claude-code-reviewer"`, prompt: `MODEL=<id>` on its own FIRST line, then `BASE_BRANCH=<branch>` directly under it when there is a base branch to name, then `Review the changes for production readiness`. Without a base branch, drop the middle line. The one-line `BASE_BRANCH=<branch> MODEL=<id> …` form this bullet used to prescribe put `BASE_BRANCH=` at the head of the first line, against `agents/ext-claude-code-reviewer.md`'s own requirement that MODEL be there — it worked in practice, but only because every agent so far read past it
 
-**CRITICAL — wrapper reviewers get a SHORT delegation prompt, NOT an inlined review task.** The codex / gemini / grok / ext-claude reviewers (and on HOST=grok, `claude-mesh:claude-code-reviewer`) are thin wrappers; their agent def forces them to invoke the matching `*-code-review` skill, and the SKILL resolves the diff and builds the review prompt itself. Pass each wrapper ONLY the short prompt above (prefixed with `MODEL=<id>` for ext-claude; headed by `MODEL=<entry>` / `MODEL=<alias>` on its own first line for grok and for Grok-host claude). Do **NOT** inline scope / diff / project invariants / focus areas into a wrapper's prompt: a detailed "review this yourself" prompt makes the wrapper self-review on its own model instead of delegating to the external model — silently, with no `runs/<engine>/…` artifacts produced. Extra review context, if any, is forwarded by the agent to the skill's `CONTEXT` argument; it is never a license to review inline. (On HOST=claude-code only the builtin `claude` / `general-purpose` reviewers review directly. On HOST=grok native `general-purpose` children also review directly — they have no skill to invoke. `explore` on Grok 1.0.13 has no shell.)
+**CRITICAL — wrapper reviewers get a SHORT delegation prompt, NOT an inlined review task.** The codex / gemini / grok / ext-claude reviewers (and on HOST=grok, `mesh-review:claude-code-reviewer`) are thin wrappers; their agent def forces them to invoke the matching `*-code-review` skill, and the SKILL resolves the diff and builds the review prompt itself. Pass each wrapper ONLY the short prompt above (prefixed with `MODEL=<id>` for ext-claude; headed by `MODEL=<entry>` / `MODEL=<alias>` on its own first line for grok and for Grok-host claude). Do **NOT** inline scope / diff / project invariants / focus areas into a wrapper's prompt: a detailed "review this yourself" prompt makes the wrapper self-review on its own model instead of delegating to the external model — silently, with no `runs/<engine>/…` artifacts produced. Extra review context, if any, is forwarded by the agent to the skill's `CONTEXT` argument; it is never a license to review inline. (On HOST=claude-code only the builtin `claude` / `general-purpose` reviewers review directly. On HOST=grok native `general-purpose` children also review directly — they have no skill to invoke. `explore` on Grok 1.0.13 has no shell.)
 
 **HOST=grok — `spawn_subagent` dispatch, all `background: true`, one message.** Same short wrapper prompts as the CC bullets; `spawn_subagent` instead of Task. Do not pass `runtime.dispatch_model` unless that value is in `HOST_MODELS`. Do not pass `opus` as spawn `model:`.
 
@@ -700,16 +706,16 @@ For each selected model id:
       ## Tooling constraint
 
       Do NOT invoke any skill or slash command, and do NOT delegate this review to another agent or
-      orchestration. Names like `claude-mesh:mesh-review` may be visible in your environment; they
+      orchestration. Names like `mesh-review:mesh-review` may be visible in your environment; they
       are not part of this task. Read the code with your own file, search and shell tools, and
       answer with the review itself.
   ```
 
-- **claude:** for each `SELECTED_CLAUDE_MODELS` entry, `subagent_type: claude-mesh:claude-code-reviewer`, short prompt `MODEL=<alias>` on the first line, `BASE_BRANCH=<branch>` next when the argument was given, then `Review the changes for production readiness`. Name `claude:<alias>`. Roster `claude/<alias>` (`claude/opus`). If `claude` selected and the list is empty: one reviewer, **no MODEL line** (CLI default, `claude -p` without `-m`); roster `claude/_default`. Do **not** pass spawn `model: opus` — the alias lives on the prompt's `MODEL=` line. `HOST_CLAUDE=1` is the agent's job, not a spawn field.
+- **claude:** for each `SELECTED_CLAUDE_MODELS` entry, `subagent_type: mesh-review:claude-code-reviewer`, short prompt `MODEL=<alias>` on the first line, `BASE_BRANCH=<branch>` next when the argument was given, then `Review the changes for production readiness`. Name `claude:<alias>`. Roster `claude/<alias>` (`claude/opus`). If `claude` selected and the list is empty: one reviewer, **no MODEL line** (CLI default, `claude -p` without `-m`); roster `claude/_default`. Do **not** pass spawn `model: opus` — the alias lives on the prompt's `MODEL=` line. `HOST_CLAUDE=1` is the agent's job, not a spawn field.
 
   ```
   spawn_subagent:
-    subagent_type: claude-mesh:claude-code-reviewer
+    subagent_type: mesh-review:claude-code-reviewer
     background: true
     description: "Review via claude:<alias>"
     prompt: |
@@ -737,11 +743,13 @@ When each agent completes, read its output. After all agents finish (or the user
 2. **Watch the disk with `shared/watch-runs.sh`, launched as a background Bash task**, so "Do NOT block" above stays true — a foreground poll loop would hold the session hostage, and a background watcher that returns on each event re-invokes you per event. **Do NOT hand-roll a poller.** The improvised one exited only when the count of finished runs grew, and death never grows a count; that is the blind spot this script exists to close.
 
    ```bash
-   LOADER="${CLAUDE_PLUGIN_ROOT}/skills/shared/config-loader.sh"
-   [ -f "$LOADER" ] || [ -z "${GROK_SESSION_ID:-}" ] || LOADER="$(find "$HOME"/.grok/installed-plugins -path '*claude-mesh*/skills/shared/config-loader.sh' 2>/dev/null | sort -V | tail -1)" || true
-   [ -f "$LOADER" ] || LOADER="$(find "$HOME"/.claude/plugins -path '*claude-mesh*/skills/shared/config-loader.sh' 2>/dev/null | sort -V | tail -1)" || true
-   [ -f "$LOADER" ] || LOADER="$(find "$HOME"/.grok/plugins -path '*claude-mesh*/skills/shared/config-loader.sh' 2>/dev/null | sort -V | tail -1)" || true
-   [ -f "$LOADER" ] || { echo "config-loader.sh not found" >&2; exit 1; }
+   FINDER="${CLAUDE_PLUGIN_ROOT}/skills/shared/find-mesh-exec.sh"
+   [ -f "$FINDER" ] || [ -z "${GROK_SESSION_ID:-}" ] || FINDER="$(find "$HOME"/.grok/installed-plugins -path '*mesh-review*/skills/shared/find-mesh-exec.sh' 2>/dev/null | sort -V | tail -1)" || true
+   [ -f "$FINDER" ] || FINDER="$(find "$HOME"/.claude/plugins -path '*mesh-review*/skills/shared/find-mesh-exec.sh' 2>/dev/null | sort -V | tail -1)" || true
+   [ -f "$FINDER" ] || FINDER="$(find "$HOME"/.grok/plugins -path '*mesh-review*/skills/shared/find-mesh-exec.sh' 2>/dev/null | sort -V | tail -1)" || true
+   [ -f "$FINDER" ] || { echo "find-mesh-exec.sh not found (is mesh-review installed?)" >&2; exit 1; }
+   MESH_EXEC="$(bash "$FINDER")" || exit 1
+   LOADER="$MESH_EXEC/skills/shared/config-loader.sh"
    WATCH="$(dirname "$LOADER")/watch-runs.sh"
    [ -x "$WATCH" ] || { echo "watch-runs.sh missing or not executable at $WATCH" >&2; exit 1; }
    "$WATCH" --since <DISPATCH_EPOCH> codex grok/grok-4.6 ext-claude/zai/glm ext-claude/ollama/kimi
@@ -816,7 +824,7 @@ Issues are processed in a **fixed four-phase order**. Do NOT interleave phases. 
 4. **Every disputed issue gets a structured analysis** (Суть → Анализ → Варианты → Рекомендация). Bullet-only one-liners are forbidden.
 5. **Always evaluate the variants you propose.** Each variant gets pros/cons; you explicitly recommend ONE with reasoning. Never list variants neutrally.
 6. **If only one variant is genuinely adequate, do not ask the user.** Announce the decision, briefly say why the others fail, apply, move on.
-7. **One disputed issue at a time.** Present its analysis; if one variant is adequate, apply it in the same message and move on; if a choice remains, the analysis is the FINAL message of the turn (no tool call) and you wait for the user's free-text answer, then apply and start the next. In `default` (non-interactive) mode never wait — record the issue as deferred per Step 6.4.b and continue. In `autodecide` mode neither wait nor defer: follow `/claude-mesh:auto-decide-disputed`, which applies your own recommendation after an explicit self-check. Never batch.
+7. **One disputed issue at a time.** Present its analysis; if one variant is adequate, apply it in the same message and move on; if a choice remains, the analysis is the FINAL message of the turn (no tool call) and you wait for the user's free-text answer, then apply and start the next. In `default` (non-interactive) mode never wait — record the issue as deferred per Step 6.4.b and continue. In `autodecide` mode neither wait nor defer: follow `/mesh-review:auto-decide-disputed`, which applies your own recommendation after an explicit self-check. Never batch.
 8. **When a choice remains, the analysis IS the question — never AskUserQuestion.** The structured write-up (variants with pros/cons + recommendation) is the turn-final message; the turn ends with no trailing tool call and the user answers in free text (in `default` mode nobody can answer — defer per Step 6.4.b; in `autodecide` mode the analysis is not a question at all — see Step 6.4). A trailing AskUserQuestion duplicates your write-up in its own modal UI and makes the harness drop the analysis — the user then sees only a bare modal. This is the regression this rule prevents.
 
 ### Step 6.0: Verify delegation (mechanical guard)
@@ -833,11 +841,13 @@ Run points 1 and 2 in the SAME Bash call: `$VERIFY` and `$DATA_DIR` are stamped 
 ```bash
 # Same resolution as Step 1 — the guard MUST come from the plugin copy that is actually
 # running, otherwise a --plugin-dir dev load verifies with the installed cache's guard.
-LOADER="${CLAUDE_PLUGIN_ROOT}/skills/shared/config-loader.sh"
-[ -f "$LOADER" ] || [ -z "${GROK_SESSION_ID:-}" ] || LOADER="$(find "$HOME"/.grok/installed-plugins -path '*claude-mesh*/skills/shared/config-loader.sh' 2>/dev/null | sort -V | tail -1)" || true
-[ -f "$LOADER" ] || LOADER="$(find "$HOME"/.claude/plugins -path '*claude-mesh*/skills/shared/config-loader.sh' 2>/dev/null | sort -V | tail -1)" || true
-[ -f "$LOADER" ] || LOADER="$(find "$HOME"/.grok/plugins -path '*claude-mesh*/skills/shared/config-loader.sh' 2>/dev/null | sort -V | tail -1)" || true
-[ -f "$LOADER" ] || { echo "config-loader.sh not found" >&2; exit 1; }
+FINDER="${CLAUDE_PLUGIN_ROOT}/skills/shared/find-mesh-exec.sh"
+[ -f "$FINDER" ] || [ -z "${GROK_SESSION_ID:-}" ] || FINDER="$(find "$HOME"/.grok/installed-plugins -path '*mesh-review*/skills/shared/find-mesh-exec.sh' 2>/dev/null | sort -V | tail -1)" || true
+[ -f "$FINDER" ] || FINDER="$(find "$HOME"/.claude/plugins -path '*mesh-review*/skills/shared/find-mesh-exec.sh' 2>/dev/null | sort -V | tail -1)" || true
+[ -f "$FINDER" ] || FINDER="$(find "$HOME"/.grok/plugins -path '*mesh-review*/skills/shared/find-mesh-exec.sh' 2>/dev/null | sort -V | tail -1)" || true
+[ -f "$FINDER" ] || { echo "find-mesh-exec.sh not found (is mesh-review installed?)" >&2; exit 1; }
+MESH_EXEC="$(bash "$FINDER")" || exit 1
+LOADER="$MESH_EXEC/skills/shared/config-loader.sh"
 VERIFY="$(dirname "$LOADER")/verify-delegation.sh"
 DATA_DIR="$("$LOADER" data-dir)"
 N="$("$LOADER" get-runtime | jq -r '.max_redispatch // 1')"; [[ "$N" =~ ^[0-9]+$ ]] || N=1
@@ -985,9 +995,9 @@ If no files were modified, skip this commit.
 If `D == 0`, finish (jump to Step 6.5 with a brief summary).
 
 **Autodecide mode.** If `AUTODECIDE` is true (Step 0) **or the user has already invoked**
-`/claude-mesh:auto-decide-disputed` in this session — its state S3 arms the mode without any
+`/mesh-review:auto-decide-disputed` in this session — its state S3 arms the mode without any
 argument being passed — do NOT run the interactive loop below: invoke
-`/claude-mesh:auto-decide-disputed` through the Skill tool now and follow it for the whole disputed
+`/mesh-review:auto-decide-disputed` through the Skill tool now and follow it for the whole disputed
 queue.
 
 It replaces **the whole of 6.4.b — both branches**: the single-adequate-variant branch as much as
@@ -1074,7 +1084,7 @@ In `default` mode display instead (not when `autodecide` is also active — then
   - **If the turn is resumed by a background event** (e.g. a Step 5a watcher or task notification) rather than a user reply: handle the event, then end the turn again with a one-line reminder of the pending choice. A non-user event is never the user's answer.
   - **In `default` (non-interactive) mode there is nobody to ask.** Do NOT wait. Record the issue as *deferred* with your recommended variant noted, do NOT apply it, and continue to the next. The full analysis above stays in the run output as the decision record. Deferred disputed issues are surfaced in the Step 6.6 summary; the user re-runs interactively to decide them.
     **Unless `autodecide` is active** — then this `default`-mode bullet does not apply at all:
-    decide the issue per `/claude-mesh:auto-decide-disputed` instead of deferring it. `default` and
+    decide the issue per `/mesh-review:auto-decide-disputed` instead of deferring it. `default` and
     `autodecide` are orthogonal, and when both are set, autodecide wins here.
 
 **6.4.c — Process ONE disputed issue at a time.** Present analysis → (auto-apply if one variant is adequate, otherwise end the turn and wait for the free-text choice; in `default` mode defer instead of waiting; in `autodecide` mode neither — the command decides and applies) → apply → THEN move to the next. Never batch multiple disputed issues into a single message.

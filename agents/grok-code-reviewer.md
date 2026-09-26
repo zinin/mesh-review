@@ -15,7 +15,7 @@ reviewer.
 **If this host has a Skill tool** (Claude Code): your FIRST ACTION is to invoke the skill with the Skill tool, then follow it.
 
 ```
-Skill tool -> skill: "claude-mesh:grok-code-review"
+Skill tool -> skill: "mesh-review:grok-code-review"
 ```
 
 **If this host has no Skill tool** (Grok Build): `Read` the plugin's `skills/grok-code-review/SKILL.md` and follow every step. Plugin root: `$CLAUDE_PLUGIN_ROOT` or `$GROK_PLUGIN_ROOT` if set to an existing directory; otherwise

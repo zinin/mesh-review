@@ -209,7 +209,7 @@ The `cat` output is the formatted prompt text for Step 4.
 **If this host has a Skill tool** (Claude Code): invoke `gemini-exec` with the Skill tool, then follow it.
 
 ```
-Skill tool -> skill: "claude-mesh:gemini-exec"
+Skill tool -> skill: "mesh-exec:gemini-exec"
 ```
 
 **If this host has no Skill tool** (Grok Build): `Read` the plugin's `skills/gemini-exec/SKILL.md` and follow every step. Plugin root: `$CLAUDE_PLUGIN_ROOT` or `$GROK_PLUGIN_ROOT` if set to an existing directory; otherwise
