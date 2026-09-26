@@ -16,18 +16,23 @@ Disable marketplace copies of the three first (`claude plugin disable <name>@zin
 re-enable them afterwards. In Grok install a snapshot of each (`grok plugin install <path>
 --trust`), one snapshot per plugin; `MESH_EXEC_ROOT` is not needed there — the finder takes
 the `installed-plugins` snapshot inside a Grok session. Grok ignores `dependencies`:
-installing mesh-review brings neither mesh-exec nor session-relay. It names a snapshot after
+installing mesh-review brings neither mesh-exec nor session-relay. Grok names a snapshot after
 its source directory, and the finder matches `mesh-exec` only, so install mesh-exec from a
-directory named `mesh-exec` (a copy is fine): a checkout still named `claude-mesh` gives
-`claude-mesh-<hash>`, which the finder never takes.
+directory named `mesh-exec` (a copy is fine — refresh it from the working tree before each
+reinstall): a checkout still named `claude-mesh` gives `claude-mesh-<hash>`, which the finder
+never takes. A snapshot is a copy: after editing a tree, `grok plugin uninstall <name>
+--confirm`, install it again and start a new session.
 
 ## Cross-plugin contract
 
 mesh-review runs mesh-exec's `config-loader.sh` (subcommands `data-dir`, `config-path`,
 `get-flag`, `get-defaults`, `get-runtime`, `list-models`, `list-claude-models`,
 `list-grok-models`, `get-codex`, `get-gemini`), `preflight-env.sh`, `watch-runs.sh`,
-`verify-delegation.sh`, `watchdog.sh` and `list-host-models.sh`, and invokes its exec skills and
-executor agents by name. A change to that interface ships in the same release on both sides.
+`verify-delegation.sh`, `watchdog.sh` and `list-host-models.sh`, invokes its exec skills
+(`mesh-exec:<engine>-exec`) and executor agents (`mesh-exec:<engine>-executor`) by name, and
+reads its run directories directly (`<data-dir>/runs/<engine>/…` with `.session_id`,
+`output.txt`, `final/` and `watchdog.log`). A change to that interface ships in the same
+release on both sides.
 
 ## While working in this repo
 
