@@ -17,7 +17,7 @@ Skill tool -> skill: "mesh-review:gemini-code-review"
 ```
 
 **If this host has no Skill tool** (Grok Build): `Read` the plugin's `skills/gemini-code-review/SKILL.md` and follow every step. Plugin root: `$CLAUDE_PLUGIN_ROOT` or `$GROK_PLUGIN_ROOT` if set to an existing directory; otherwise
-`find "$HOME"/.grok/installed-plugins -path '*claude-mesh*/skills/gemini-code-review/SKILL.md' 2>/dev/null | sort -V | tail -1` — and, only if that prints nothing, `find "$HOME"/.claude/plugins -path '*claude-mesh*/skills/gemini-code-review/SKILL.md' 2>/dev/null | sort -V | tail -1` — and, only if that prints nothing, `find "$HOME"/.grok/plugins -path '*claude-mesh*/skills/gemini-code-review/SKILL.md' 2>/dev/null | sort -V | tail -1`.
+`find "$HOME"/.grok/installed-plugins -path '*mesh-review*/skills/gemini-code-review/SKILL.md' 2>/dev/null | sort -V | tail -1` — and, only if that prints nothing, `find "$HOME"/.claude/plugins -path '*mesh-review*/skills/gemini-code-review/SKILL.md' 2>/dev/null | sort -V | tail -1` — and, only if that prints nothing, `find "$HOME"/.grok/plugins -path '*mesh-review*/skills/gemini-code-review/SKILL.md' 2>/dev/null | sort -V | tail -1`.
 Following the skill **is** CLI delegation. It is not a review you perform yourself.
 
 ## After the engine starts
@@ -44,9 +44,9 @@ a review from a **different model** (Google Gemini), not from Claude.
 
 ## Verification
 
-After the skill completes, verify that artifacts were created (Task 2.5: `${CLAUDE_PLUGIN_DATA}` is empty in agent Bash calls — glob the data dir, newest run dirs by mtime) — and list only YOURS. The `*-exec` skills stamp `.session_id` into every run dir, and an unfiltered "newest under runs/gemini" answers a different question whenever another session is reviewing on this machine at the same time — on 2026-08-30 such a listing reported a live reviewer dead (see `grok-code-reviewer.md`). A run carrying no `.session_id` stays eligible on purpose — it predates the stamp.
+After the skill completes, verify that artifacts were created (run dirs live under `~/.local/state/mesh/runs/`, newest run dirs by mtime) — and list only YOURS. The `*-exec` skills stamp `.session_id` into every run dir, and an unfiltered "newest under runs/gemini" answers a different question whenever another session is reviewing on this machine at the same time — on 2026-08-30 such a listing reported a live reviewer dead (see `grok-code-reviewer.md`). A run carrying no `.session_id` stays eligible on purpose — it predates the stamp.
 ```bash
-for d in "$HOME"/.claude/plugins/data/claude-mesh-*/runs/gemini/*/; do
+for d in "${XDG_STATE_HOME:-$HOME/.local/state}"/mesh/runs/gemini/*/; do
     [ -d "$d" ] || continue
     run_sid=""; [ -r "$d/.session_id" ] && IFS= read -r run_sid < "$d/.session_id"
     [ -z "${CLAUDE_CODE_SESSION_ID:-${GROK_SESSION_ID:-}}" ] || [ -z "$run_sid" ] || [ "$run_sid" = "${CLAUDE_CODE_SESSION_ID:-${GROK_SESSION_ID:-}}" ] || continue
@@ -61,7 +61,7 @@ If no new directory was created, the review did NOT execute properly — report 
 You will return:
 - The review findings from Gemini (Critical, Important, Minor issues)
 - Assessment (Ready to merge or not)
-- Links to full report files in `${CLAUDE_PLUGIN_DATA}/runs/gemini/`
+- Links to full report files in `~/.local/state/mesh/runs/gemini/`
 
 ## Supervised Mode
 

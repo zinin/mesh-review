@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
-# Presence contract for the Grok-host Claude CLI wrappers (spec §4).
+# Contract for the mesh-review wrapper agents and review skills.
 #
-# claude-code-reviewer / claude-executor dispatch official `claude -p` via
-# ext-claude-exec HOST_CLAUDE=1. Catalog aliases (opus, fable), no tooling
-# constraint, run dirs under runs/claude/. Task 6 appends dual-path asserts
-# for all ten wrappers; this file starts with the three new paths only so
-# Test 6 in test-command-sync.sh stays grok-specific.
+# claude-code-reviewer dispatches official `claude -p` through mesh-exec's ext-claude-exec
+# (HOST_CLAUDE=1): catalog aliases (opus, fable), no tooling constraint, run dirs under
+# runs/claude/. The executor half of this file stayed in mesh-exec with the executors.
 set -u
 TESTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$TESTS_DIR/../../.." && pwd)"
@@ -36,18 +34,13 @@ assert_ge() {
     fi
 }
 
-echo "=== Test: claude CLI reviewer, executor, review skill ==="
+echo "=== Test: claude CLI reviewer and review skill ==="
 assert_eq "reviewer agent exists" "1" "$([ -f "$REPO/agents/claude-code-reviewer.md" ] && echo 1 || echo 0)"
-assert_eq "executor agent exists" "1" "$([ -f "$REPO/agents/claude-executor.md" ] && echo 1 || echo 0)"
 assert_eq "review skill exists" "1" "$([ -f "$REPO/skills/claude-code-review/SKILL.md" ] && echo 1 || echo 0)"
 assert_eq "reviewer does not STOP when MODEL is omitted" "0" \
     "$(grep -c 'ERROR: MODEL parameter is required on first line' "$REPO/agents/claude-code-reviewer.md")"
-assert_eq "executor does not STOP when MODEL is omitted" "0" \
-    "$(grep -c 'ERROR: MODEL parameter is required on first line' "$REPO/agents/claude-executor.md")"
 assert_ge "reviewer still invokes skill when MODEL omitted" "1" \
     "$(grep -c 'If the first line is not `MODEL=`, still invoke the skill' "$REPO/agents/claude-code-reviewer.md")"
-assert_ge "executor still invokes skill when MODEL omitted" "1" \
-    "$(grep -c 'If the first line is not `MODEL=`, still invoke the skill' "$REPO/agents/claude-executor.md")"
 assert_ge "reviewer names HOST_CLAUDE" "1" \
     "$(grep -c 'HOST_CLAUDE=1' "$REPO/skills/claude-code-review/SKILL.md")"
 assert_eq "review skill has no tooling-constraint section" "0" \
@@ -56,8 +49,7 @@ assert_eq "review skill has no tooling-constraint section" "0" \
 echo ""
 echo "=== Test: wrapper dual-path invoke + Grok wait ==="
 AGENTS="$REPO/agents"
-# 8 pre-existing wrappers; claude-* already have the paragraph from Task 5.
-WRAPPERS="codex-code-reviewer.md codex-executor.md gemini-code-reviewer.md gemini-executor.md grok-code-reviewer.md grok-executor.md ext-claude-code-reviewer.md ext-claude-executor.md claude-code-reviewer.md claude-executor.md"
+WRAPPERS="codex-code-reviewer.md gemini-code-reviewer.md grok-code-reviewer.md ext-claude-code-reviewer.md claude-code-reviewer.md"
 forbid=0
 for f in $WRAPPERS; do
     grep -q 'Do NOT read SKILL.md' "$AGENTS/$f" && forbid=$((forbid+1))
@@ -72,16 +64,16 @@ assert_eq "every wrapper has dual invoke + Grok wait" "0" "$missing"
 
 echo ""
 echo "=== Test: empty-SKILL_BASE else-branch is in the fence ==="
-# Prose telling the LLM to rewrite is not enough: the executable fence must
-# contain the find fallback. Every resolve-plugin-root.sh call via $SKILL_BASE
-# must sit in `if [ -n "$SKILL_BASE" ]`.
-SKILLS_WITH_RESOLVER="claude-code-review ext-claude-exec ext-claude-code-review codex-exec codex-code-review gemini-exec gemini-code-review grok-exec grok-code-review mesh-design-review"
+# Prose telling the LLM to rewrite is not enough: the executable fence must contain the find
+# fallback. Every resolve-plugin-root.sh call via $SKILL_BASE must sit in `if [ -n "$SKILL_BASE" ]`,
+# and the else-branch finds THIS plugin by its own marker, find-mesh-exec.sh.
+SKILLS_WITH_RESOLVER="claude-code-review ext-claude-code-review codex-code-review gemini-code-review grok-code-review mesh-design-review"
 mismatch=0
 for s in $SKILLS_WITH_RESOLVER; do
     f="$REPO/skills/$s/SKILL.md"
     n_resolve="$(grep -c 'bash "$SKILL_BASE/../shared/resolve-plugin-root.sh"' "$f" || true)"
     n_if="$(grep -c 'if \[ -n "\$SKILL_BASE" \]; then' "$f" || true)"
-    n_find="$(grep -c 'claude-mesh\*/skills/shared/config-loader.sh' "$f" || true)"
+    n_find="$(grep -c 'mesh-review\*/skills/shared/find-mesh-exec.sh' "$f" || true)"
     n_installed="$(grep -c 'installed-plugins' "$f" || true)"
     if [ "$n_resolve" != "$n_if" ] || [ "$n_find" -lt "$n_if" ]; then
         mismatch=$((mismatch+1))
@@ -95,65 +87,27 @@ done
 assert_eq "every resolver fence has empty-SKILL_BASE else-branch" "0" "$mismatch"
 
 echo ""
-echo "=== Test: HOST_CLAUDE claude -p uses --model, not -m ==="
-# Measured 2026-09-01 on Claude Code 2.1.257: `claude -p -m fable` →
-# `error: unknown option '-m'`. The long option is `--model`.
-n_old="$(grep -c 'claude -p -m' "$REPO/skills/ext-claude-exec/SKILL.md" || true)"
-n_new="$(grep -c 'claude -p --model' "$REPO/skills/ext-claude-exec/SKILL.md" || true)"
-assert_eq "no HOST_CLAUDE invocation still passes -m" "0" "$n_old"
-assert_ge "HOST_CLAUDE invocations pass --model" "2" "$n_new"
-
-echo ""
-echo "=== Test: HOST_CLAUDE MODEL charset matches watch-runs / verify-delegation ==="
-# claude.models admits :/@ via IDENT_RE; the watcher and guard do not. A HOST_CLAUDE
-# alias with those characters created a run dir the guard then refused as usage error.
-assert_ge "HOST_CLAUDE path rejects :/@ before mkdir" "1" \
-    "$(grep -cE 'A-Za-z0-9\]\[A-Za-z0-9\._-\]\*' "$REPO/skills/ext-claude-exec/SKILL.md")"
-assert_ge "session stamp falls back to GROK_SESSION_ID" "1" \
-    "$(grep -c 'GROK_SESSION_ID' "$REPO/skills/ext-claude-exec/SKILL.md")"
-
-echo ""
-echo "=== Test: Grok Read of *-exec searches installed-plugins first ==="
-# Agent defs already find review SKILL.md under installed-plugins. The next hop —
-# review skill → exec SKILL.md — still opened ~/.claude/plugins first (measured
-# 2026-09-01: cache 0.12.0 has no HOST_CLAUDE). The no-Skill-tool paragraph must
-# name installed-plugins before .claude/plugins.
+echo "=== Test: Grok reads each exec skill from mesh-exec, through find-mesh-exec.sh ==="
+# The review skill → exec SKILL.md hop crosses into another plugin. The no-Skill-tool paragraph
+# must hand the path to find-mesh-exec.sh (MESH_EXEC_ROOT, then installed-plugins inside a Grok
+# session, then .claude, then .grok) and must not name the old plugin.
 REVIEW_SKILLS="claude-code-review ext-claude-code-review codex-code-review gemini-code-review grok-code-review"
-read_stale=0
+read_bad=0
 for s in $REVIEW_SKILLS; do
-    f="$REPO/skills/$s/SKILL.md"
-    para="$(awk '/If this host has no Skill tool/,/Following the skill/' "$f")"
-    # Byte offset, not line number: all three finds live on one continuation line.
-    inst_pos=$(printf '%s' "$para" | grep -bo 'installed-plugins' | head -1 | cut -d: -f1)
-    claude_pos=$(printf '%s' "$para" | grep -bo '\.claude/plugins' | head -1 | cut -d: -f1)
-    if [ -z "$inst_pos" ] || [ -z "$claude_pos" ] || [ "$inst_pos" -ge "$claude_pos" ]; then
-        read_stale=$((read_stale+1))
-        echo "    stale $s: installed-plugins pos=${inst_pos:-none} .claude pos=${claude_pos:-none}"
-    fi
+    para="$(awk '/If this host has no Skill tool/,/Following the skill/' "$REPO/skills/$s/SKILL.md")"
+    printf '%s' "$para" | grep -q 'find-mesh-exec.sh' || { read_bad=$((read_bad+1)); echo "    $s: no find-mesh-exec.sh"; }
+    if printf '%s' "$para" | grep -q 'claude-mesh'; then read_bad=$((read_bad+1)); echo "    $s: still names claude-mesh"; fi
 done
-assert_eq "every review→exec Read searches installed-plugins before .claude/plugins" "0" "$read_stale"
-
-echo ""
-echo "=== Test: ext-claude-exec launch fences re-check MODEL / HOST_CLAUDE against Step 1 ==="
-# MODEL and HOST_CLAUDE are substituted into every fence separately. Step 1 writes the pair it
-# validated to $WORK_DIR/.mode; both Step 2 launch fences must read it back and STOP on a
-# mismatch before the CLI starts (decided 2026-09-02). One write, two checks.
-EXEC_SKILL="$REPO/skills/ext-claude-exec/SKILL.md"
-assert_eq "Step 1 writes .mode once" "1" "$(grep -c '> "\$WORK_DIR/.mode"' "$EXEC_SKILL")"
-assert_eq "both launch fences read .mode" "2" "$(grep -c 'if \[ -f "\$WORK_DIR/.mode" \]; then' "$EXEC_SKILL")"
+assert_eq "every review→exec Read goes through find-mesh-exec.sh" "0" "$read_bad"
 
 echo ""
 echo "=== Test: resolver fences keep the ROOT ORDER, and the prose agrees ==="
-# 0c851d0 moved installed-plugins to the front of every fence and left the prose in all ten
-# skills saying `.claude` first; the counts above never looked at ORDER or at prose, so the
-# drift was invisible until an external review read both. Every fence holds exactly one find
-# per root, so pairing the i-th line of each root by position checks every fence: the
-# installed-plugins line must precede the .claude line, which must precede the .grok line.
+# Every fence holds exactly one find per root, so pairing the i-th line of each root by position
+# checks every fence: the installed-plugins line must precede the .claude line, which must
+# precede the .grok line.
 order_bad=0
 for s in $SKILLS_WITH_RESOLVER; do
     f="$REPO/skills/$s/SKILL.md"
-    # Byte offsets, not line numbers: the review→exec Read paragraph carries all three finds
-    # on ONE line, and a line-number comparison reads that correct order as a tie.
     inst="$(grep -boF 'find "$HOME"/.grok/installed-plugins -path' "$f" | cut -d: -f1)"
     cc="$(grep -boF 'find "$HOME"/.claude/plugins -path' "$f" | cut -d: -f1)"
     gp="$(grep -boF 'find "$HOME"/.grok/plugins -path' "$f" | cut -d: -f1)"
@@ -174,42 +128,20 @@ done
 assert_eq "every skill fence searches installed-plugins, .claude, .grok in that order, and the prose says so" "0" "$order_bad"
 
 echo ""
-echo "=== Test: missing installed-plugins does not abort a set -euo pipefail skill fence ==="
-# ext-claude-exec Step 1/2 fences are `set -euo pipefail`. The last `||` arm is the
-# installed-plugins find; GNU find returns 1 on a missing dir, pipefail promotes that
-# to the assignment, and `set -e` then exits before the .claude fallback — silent
-# death of every wrapper on marketplace Grok (no grok plugin install). Extract the
-# live three-line chain so this assertion cannot drift from the fence.
-ELSE_CHAIN="$(awk '/find "\$HOME"\/\.grok\/installed-plugins/ {print; getline; print; getline; print; exit}' \
-    "$REPO/skills/ext-claude-exec/SKILL.md")"
-assert_eq "extracted a 3-line else-chain from ext-claude-exec" "3" \
-    "$(printf '%s\n' "$ELSE_CHAIN" | grep -c .)"
-TDIR=$(mktemp -d)
-mkdir -p "$TDIR/home/.claude/plugins/cache/zinin/claude-mesh/0.12.0/skills/shared"
-: > "$TDIR/home/.claude/plugins/cache/zinin/claude-mesh/0.12.0/skills/shared/config-loader.sh"
-GOT=$(HOME="$TDIR/home" GROK_SESSION_ID="grok-session-1" bash -c 'set -euo pipefail
-_LOADER=""
-'"$ELSE_CHAIN"'
-printf %s "$_LOADER"'); RC=$?
-assert_eq "skill else-chain ran cleanly under set -e" "0" "$RC"
-assert_eq "skill else-chain falls through to the Claude cache" \
-    "$TDIR/home/.claude/plugins/cache/zinin/claude-mesh/0.12.0/skills/shared/config-loader.sh" "$GOT"
-rm -rf "$TDIR"
-
-echo ""
-echo "=== Test: every loader-find assignment is guarded against find rc=1 ==="
-# The three roots are each a `find | sort | tail` assignment. Any one of them on a
-# missing directory is the same set -e hole. `|| true` after the assignment is the
-# contract; a new fence without it must fail this count.
+echo "=== Test: every root-find assignment is guarded against find rc=1 ==="
+# The three roots are each a `find | sort | tail` assignment. Any one of them on a missing
+# directory is a set -e hole; `|| true` after the assignment is the contract.
 unprotected=0
 while IFS= read -r line; do
     printf '%s\n' "$line" | grep -q '|| true[[:space:]]*$' && continue
     unprotected=$((unprotected+1))
     echo "    unguarded: $line"
-done < <(grep -h 'find "$HOME"/.*/config-loader.sh' \
+done < <(grep -h 'find "$HOME"/.*/find-mesh-exec.sh' \
     "$REPO"/skills/*/SKILL.md "$REPO"/commands/*.md \
     "$REPO"/skills/shared/resolve-plugin-root.sh || true)
-assert_eq "every loader find assignment ends with || true" "0" "$unprotected"
+assert_ge "the guard check saw the finds" "20" \
+    "$(grep -h 'find "$HOME"/.*/find-mesh-exec.sh' "$REPO"/skills/*/SKILL.md "$REPO"/commands/*.md "$REPO"/skills/shared/resolve-plugin-root.sh | grep -c .)"
+assert_eq "every root find assignment ends with || true" "0" "$unprotected"
 
 echo ""
 echo "=== Summary: $PASS passed, $FAIL failed ==="
