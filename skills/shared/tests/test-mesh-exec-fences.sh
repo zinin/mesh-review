@@ -18,8 +18,9 @@ for f in "$REPO"/skills/*/SKILL.md "$REPO"/commands/*.md; do
         in_f && /^[ \t]*```[ \t]*$/ { in_f = 0; next }
         in_f {
             line = $0
-            if (line ~ /MESH_EXEC=/) assigned = 1
-            tmp = line; gsub(/MESH_EXEC=/, "", tmp)
+            if (line ~ /^[ \t]*MESH_EXEC="?\$\(bash "(\$FINDER|\$SKILL_BASE\/\.\.\/shared\/find-mesh-exec\.sh)"\)"? \|\| exit 1[ \t]*$/) { assigned = 1; next }
+            tmp = line; gsub(/MESH_EXEC_ROOT/, "", tmp)
+            if (tmp ~ /MESH_EXEC=/ && tmp !~ /echo "MESH_EXEC=/) printf "BAD %s:%d MESH_EXEC assigned outside the pinned form\n", file, NR
             if (tmp ~ /\$MESH_EXEC/ || tmp ~ /\$\{MESH_EXEC/) {
                 uses++
                 if (!assigned) printf "BAD %s:%d (fence from line %d)\n", file, NR, start

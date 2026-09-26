@@ -78,6 +78,10 @@ assert_eq "5 primary lines across commands/" "5" "$n_primary"
 assert_eq "5 .claude fallback lines across commands/" "5" "$n_fallback"
 assert_eq "5 .grok fallback lines across commands/" "5" "$n_fallback2"
 assert_eq "5 installed-plugins fallback lines across commands/" "5" "$n_fallback_inst"
+MX='MESH_EXEC="$(bash "$FINDER")" || exit 1'
+LD='LOADER="$MESH_EXEC/skills/shared/config-loader.sh"'
+assert_eq "5 MESH_EXEC assignments with || exit 1 across commands/" "5" "$(sed 's/^[[:space:]]*//' "$CMD_DIR"/*.md | grep -Fxc "$MX")"
+assert_eq "5 LOADER lines built from \$MESH_EXEC across commands/" "5" "$(sed 's/^[[:space:]]*//' "$CMD_DIR"/*.md | grep -Fxc "$LD")"
 # Neither root may be searched together with the other in one find.
 assert_eq "0 cross-root finds remain" "0" \
     "$(grep -c '.claude/plugins "$HOME"/.grok/plugins' "$CMD_DIR"/*.md | awk -F: '{s+=$2} END {print s+0}')"
