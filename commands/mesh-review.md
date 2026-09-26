@@ -99,7 +99,7 @@ FINDER="${CLAUDE_PLUGIN_ROOT}/skills/shared/find-mesh-exec.sh"
 MESH_EXEC="$(bash "$FINDER")" || exit 1
 LOADER="$MESH_EXEC/skills/shared/config-loader.sh"
 # iter-3 CRITICAL-3: a bare $() swallows the loader exit code. Probe once with explicit rc
-# capture so rc=2 (config.yaml not created yet — fresh install) is NOT misreported as
+# capture so rc=2 (no config.yaml yet — a fresh install, or an old claude-mesh config not moved yet) is NOT misreported as
 # rc=1 (config invalid). Distinct handling per design §6.6 / iter-2 CONCERN-11.
 LOADER_ERR=$(mktemp) || { echo "STOP: mktemp failed" >&2; exit 1; }
 HAS_CODEX=$("$LOADER" get-flag has_codex 2>"$LOADER_ERR"); LRC=$?
@@ -220,7 +220,7 @@ Those later steps re-read the preset in their own fences anyway — each runs in
 `$LOADER` no longer exists, and re-resolving it costs one local script call — but the ★ decisions
 on Q1 and Step 2.1 have no fence of their own and are made from THIS read.
 
-rc=0 → proceed; rc=2 → fresh-install hint + clean exit; rc=1 → surface the validator stderr verbatim and stop — do NOT edit config.yaml (user-owned, agents never edit it) (iter-3 CRITICAL-3).
+rc=0 → proceed; rc=2 → the arm passes the loader's stderr on (with the old claude-mesh config still in place that is the command that moves it — the user's step) plus its one-line hint, then exits cleanly; rc=1 → surface the validator stderr verbatim and stop — do NOT edit config.yaml (user-owned, agents never edit it) (iter-3 CRITICAL-3).
 
 ## Step 2 (Q1): Ask which reviewer TYPES
 

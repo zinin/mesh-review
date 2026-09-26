@@ -293,7 +293,7 @@ LOADER="$MESH_EXEC/skills/shared/config-loader.sh"
 [ -x "$LOADER" ] || { echo "config-loader.sh not found at $LOADER" >&2; exit 1; }
 
 # iter-3 CRITICAL-3: a bare $() swallows the loader exit code. Probe once with explicit rc
-# capture so rc=2 (config.yaml not created yet — fresh install) is NOT misreported as
+# capture so rc=2 (no config.yaml yet — a fresh install, or an old claude-mesh config not moved yet) is NOT misreported as
 # rc=1 (config invalid).
 LOADER_ERR=$(mktemp) || { echo "STOP: mktemp failed" >&2; exit 1; }
 HAS_CODEX=$("$LOADER" get-flag has_codex 2>"$LOADER_ERR"); LRC=$?
@@ -401,7 +401,7 @@ GLOBAL_SEC=$("$LOADER" get-runtime 2>/dev/null | jq -r '.timeouts.global_sec // 
 echo "GLOBAL_SEC=$GLOBAL_SEC"
 ```
 
-rc=0 → proceed; rc=2 → fresh-install hint + clean exit; rc=1 → surface the validator stderr and stop (iter-3 CRITICAL-3). Parse `DEFAULTS_JSON` with jq (`.builtin`, `.claude_models`, `.native_models`, `.grok_models`, `.models`, `.grok_degraded`) to build `DEFAULT_IDS` (recommended ext-claude model ids), `CLAUDE_DEFAULT_IDS` (recommended Claude models), `NATIVE_DEFAULT_IDS` (recommended native slugs — the ★ set Step 5.2.3 marks with), `GROK_DEFAULT_IDS` (recommended grok models — the ★ set Step 5.2.6 marks with, so that page needs no loader read of its own) and the recommended built-in set. Compare `HAS_CODEX` / `HAS_GEMINI` / `HAS_GROK` / `HAS_MODELS` / `HAS_CLAUDE_MODELS` to `1` (the loader emits `1`/`0`, never `"true"`).
+rc=0 → proceed; rc=2 → the arm passes the loader's stderr on (with the old claude-mesh config still in place that is the command that moves it — the user's step) plus its one-line hint, then exits cleanly; rc=1 → surface the validator stderr and stop (iter-3 CRITICAL-3). Parse `DEFAULTS_JSON` with jq (`.builtin`, `.claude_models`, `.native_models`, `.grok_models`, `.models`, `.grok_degraded`) to build `DEFAULT_IDS` (recommended ext-claude model ids), `CLAUDE_DEFAULT_IDS` (recommended Claude models), `NATIVE_DEFAULT_IDS` (recommended native slugs — the ★ set Step 5.2.3 marks with), `GROK_DEFAULT_IDS` (recommended grok models — the ★ set Step 5.2.6 marks with, so that page needs no loader read of its own) and the recommended built-in set. Compare `HAS_CODEX` / `HAS_GEMINI` / `HAS_GROK` / `HAS_MODELS` / `HAS_CLAUDE_MODELS` to `1` (the loader emits `1`/`0`, never `"true"`).
 
 #### Step 5.1: `default` argument → use the preset
 
