@@ -130,7 +130,7 @@ check, and it does not prove the CLI points at that endpoint. `OK` on grok is st
 probe runs the CLI itself, which answers only when a login is live. `OK` on gh / glab means
 presence on PATH only. If the script is not found, say so and ask the user whether to update
 the plugin in this sandbox first or proceed on the built-in `claude` reviewer alone — and
-before offering that, check a `config.yaml` exists in the plugin data dir: claude needs no
+before offering that, check that `~/.config/mesh/config.yaml` exists: claude needs no
 config section, but the review skills refuse to start without a usable config.yaml at all.
 
 ## CONTEXT
