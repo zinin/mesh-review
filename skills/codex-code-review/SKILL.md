@@ -226,7 +226,7 @@ SUPERVISED_MODE=shell
 
 **Do NOT pass MODEL or REASONING_LEVEL unless the user EXPLICITLY requested specific values. When omitted, codex-exec resolves them from `config.yaml` (`codex.model` / `codex.reasoning_level`), falling back to `gpt-5.5`/`xhigh`. Never substitute o4-mini, gpt-4.1, or any other model on your own.**
 
-The codex-exec skill will create a supervised work directory under the plugin data dir
+The codex-exec skill will create a supervised work directory under mesh's state dir
 (`~/.local/state/mesh/runs/codex/`):
 ```
 ~/.local/state/mesh/runs/codex/{timestamp}-review-{branch}/

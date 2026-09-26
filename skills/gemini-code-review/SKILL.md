@@ -232,7 +232,7 @@ EXPLICITLY requested a specific different model — do NOT hardcode a model here
 
 **CRITICAL: APPROVAL_MODE must be `yolo` for code review.** The reviewer needs to run `git diff` and read files. `plan` mode (read-only) is NOT sufficient — Gemini needs tool execution to inspect the codebase.
 
-The gemini-exec skill will create a supervised work directory under the plugin data dir
+The gemini-exec skill will create a supervised work directory under mesh's state dir
 (`~/.local/state/mesh/runs/gemini/`):
 ```
 ~/.local/state/mesh/runs/gemini/{timestamp}-review-{branch}/
