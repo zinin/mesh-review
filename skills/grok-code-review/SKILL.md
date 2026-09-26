@@ -146,7 +146,7 @@ GROK_ERR=$(mktemp) || { echo "STOP: mktemp failed"; exit 1; }
 FLAG_RC=0
 HAS_GROK=$("$LOADER" get-flag has_grok 2>"$GROK_ERR") || FLAG_RC=$?
 if [ "$FLAG_RC" -eq 2 ]; then
-    echo "STOP: there is no config.yaml yet — copy config.example.yaml to $("$LOADER" config-path) and add a grok: section. It is user-owned; agents never create or edit it. The loader says:"
+    echo "STOP: there is no config.yaml at $("$LOADER" config-path) yet. If the loader's lines below give a command that moves the old claude-mesh config, run it; otherwise copy config.example.yaml there and add a grok: section. It is user-owned; agents never create or edit it. The loader says:"
     cat "$GROK_ERR"; rm -f "$GROK_ERR"; exit 1
 elif [ "$FLAG_RC" -ne 0 ]; then
     echo "STOP: config-loader could not read the grok: section (rc=$FLAG_RC) — config.yaml is user-owned; agents never edit it. The loader says:"

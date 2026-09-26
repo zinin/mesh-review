@@ -46,7 +46,7 @@ substitute the literal `grok` or `claude-code` you echoed.
 `autodecide` (Task 2.5: commands are namespaced; bare `/mesh-review` does not resolve on CC 2.1.156):
 - Skip Steps 1-3 entirely.
 - Read `defaults.code_review` via `"$LOADER" get-defaults code_review` and parse with jq (`.builtin`, `.claude_models`, `.native_models`, `.grok_models`, `.models`, `.run_mode`, `.grok_degraded`); read the runtime block ONCE via `RUNTIME_JSON=$("$LOADER" get-runtime)` and pull BOTH fields from that single JSON — `DEFAULT_RUN_MODE=$(echo "$RUNTIME_JSON" | jq -r '.default_run_mode')` and `DISPATCH_MODEL=$(echo "$RUNTIME_JSON" | jq -r '.dispatch_model // empty')` — then `echo "DISPATCH_MODEL=$DISPATCH_MODEL"` to surface it (empty = inherit the session model on dispatch). Bind `GLOBAL_SEC=$(echo "$RUNTIME_JSON" | jq -r '.timeouts.global_sec // 3600')` from the same JSON and `echo "GLOBAL_SEC=$GLOBAL_SEC"`: the HOST=grok wait in Step 5a stops at that many seconds after `DISPATCH_EPOCH`, and a deadline nothing has read is no deadline. (iter-3 CONCERN-1 — these come through the loader, not raw-yaml reads; `get-runtime` validates the runtime block, so a charset-invalid `dispatch_model` fast-fails here.)
-- Read via the loader with the same rc=2/rc=1 distinction as Step 1 (iter-3 CRITICAL-3) — rc=2 ⇒ print the copy-config hint and exit cleanly; rc=1 ⇒ surface the validator stderr verbatim and stop — do NOT edit config.yaml (user-owned, agents never edit it).
+- Read via the loader with the same rc=2/rc=1 distinction as Step 1 (iter-3 CRITICAL-3) — rc=2 ⇒ run Step 1's rc=2 arm as written (it passes the loader's stderr on — with the old claude-mesh config still in place that is the command that moves it — then prints its one-line hint) and exit cleanly; rc=1 ⇒ surface the validator stderr verbatim and stop — do NOT edit config.yaml (user-owned, agents never edit it).
 - If `defaults.code_review` not configured → STOP with error:
   `defaults.code_review not configured in config.yaml. Use /mesh-review:mesh-review without argument or add the preset.`
 - Spawn all reviewers per preset:
@@ -107,7 +107,7 @@ case "$LRC" in
   0) ;;
   # Name the file the loader actually reads, and pass its stderr on: when the old claude-mesh
   # config is still in place, the loader prints the exact command that moves it.
-  2) cat "$LOADER_ERR" >&2; echo "config.yaml ещё не создан. Скопируйте config.example.yaml в $("$LOADER" config-path), заполните токены и повторите /mesh-review:mesh-review."; rm -f "$LOADER_ERR"; exit 0 ;;
+  2) cat "$LOADER_ERR" >&2; echo "config.yaml не найден: $("$LOADER" config-path). Если загрузчик выше напечатал команду переноса старого конфига claude-mesh — выполните её; иначе скопируйте туда config.example.yaml и заполните токены. Затем повторите /mesh-review:mesh-review."; rm -f "$LOADER_ERR"; exit 0 ;;
   *) echo "config.yaml невалиден:" >&2; cat "$LOADER_ERR" >&2; rm -f "$LOADER_ERR"; exit 1 ;;
 esac
 rm -f "$LOADER_ERR"
