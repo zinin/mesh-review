@@ -301,7 +301,7 @@ case "$LRC" in
   0) ;;
   # Name the file the loader actually reads, and pass its stderr on: when the old claude-mesh
   # config is still in place, the loader prints the exact command that moves it.
-  2) cat "$LOADER_ERR" >&2; echo "config.yaml не найден: $("$LOADER" config-path). Если загрузчик выше напечатал команду переноса старого конфига claude-mesh — выполните её; иначе скопируйте туда config.example.yaml и заполните токены. Затем повторите /mesh-review:mesh-design-review."; rm -f "$LOADER_ERR"; exit 0 ;;
+  2) cat "$LOADER_ERR" >&2; echo "config.yaml не найден: $("$LOADER" config-path). Если загрузчик выше напечатал команду переноса старого конфига claude-mesh — выполните её сами (это шаг пользователя: агент конфиг не создаёт и не копирует); иначе скопируйте туда config.example.yaml и заполните токены. Затем повторите /mesh-review:mesh-design-review."; rm -f "$LOADER_ERR"; exit 0 ;;
   *) echo "config.yaml невалиден:" >&2; cat "$LOADER_ERR" >&2; rm -f "$LOADER_ERR"; exit 1 ;;
 esac
 rm -f "$LOADER_ERR"

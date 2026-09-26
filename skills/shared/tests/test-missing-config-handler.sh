@@ -10,8 +10,10 @@
 # Passing stderr on is not enough when the arm's own hint then orders the copy regardless: the
 # user gets the loader's move command and, right below it, "copy config.example.yaml, fill
 # tokens" — two contradicting instructions. The hint must defer to the move command, in both
-# orchestrators and in grok-code-review's rc=2 STOP. Each place is found by its code (the `2)`
-# arm, the `FLAG_RC -eq 2` branch), not by the sentence it prints: that is what gets checked.
+# orchestrators and in grok-code-review's rc=2 STOP, and the orchestrators' hint must say that
+# running it is the user's step: the agent reading the arm never creates or copies the config.
+# Each place is found by its code (the `2)` arm, the `FLAG_RC -eq 2` branch), not by the
+# sentence it prints: that is what gets checked.
 set -u
 TESTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$TESTS_DIR/../../.." && pwd)"
@@ -19,7 +21,7 @@ FAIL=0
 PASS=0
 check() {   # check <desc> <file>
     local desc="$1" f="$2" arm
-    arm="$(grep -E '^[[:space:]]*2\) ' "$f" | grep -F 'config.yaml')"
+    arm="$(grep -E '^[[:space:]]*2\) ' "$f")"
     if [ "$(printf '%s\n' "$arm" | grep -c .)" != 1 ]; then
         FAIL=$((FAIL+1)); echo "  FAIL: $desc: expected exactly one rc=2 arm, found $(printf '%s\n' "$arm" | grep -c .)"; return
     fi
@@ -38,6 +40,10 @@ check() {   # check <desc> <file>
     case "$arm" in
         *'команду переноса старого конфига claude-mesh'*) PASS=$((PASS+1)); echo "  PASS: $desc defers to the loader's move command" ;;
         *) FAIL=$((FAIL+1)); echo "  FAIL: $desc does not mention the loader's move command" ;;
+    esac
+    case "$arm" in
+        *'это шаг пользователя'*) PASS=$((PASS+1)); echo "  PASS: $desc says moving the config is the user's step" ;;
+        *) FAIL=$((FAIL+1)); echo "  FAIL: $desc does not say moving the config is the user's step" ;;
     esac
     case "$arm" in
         *'Скопируйте config.example.yaml в'*) FAIL=$((FAIL+1)); echo "  FAIL: $desc still orders the copy of config.example.yaml unconditionally" ;;
