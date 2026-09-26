@@ -213,7 +213,7 @@ The `cat` output is the formatted prompt text for Step 4.
 Skill tool -> skill: "mesh-exec:codex-exec"
 ```
 
-**If this host has no Skill tool** (Grok Build): `Read` mesh-exec's `skills/codex-exec/SKILL.md` and follow every step. mesh-exec's root is what `bash \"$SKILL_BASE/../shared/find-mesh-exec.sh\"` prints — `$MESH_EXEC_ROOT` when set, else `$HOME/.grok/installed-plugins` (inside a Grok session only), then `$HOME/.claude/plugins`, then `$HOME/.grok/plugins`, each version-sorted.
+**If this host has no Skill tool** (Grok Build): `Read` mesh-exec's `skills/codex-exec/SKILL.md` and follow every step. mesh-exec's root is what `bash "$SKILL_BASE/../shared/find-mesh-exec.sh"` prints — `$MESH_EXEC_ROOT` when set, else `$HOME/.grok/installed-plugins` (inside a Grok session only), then `$HOME/.claude/plugins`, then `$HOME/.grok/plugins`, each version-sorted.
 Following the skill **is** CLI delegation. It is not a review you perform yourself.
 
 Pass these parameters:
