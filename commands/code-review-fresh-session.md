@@ -167,11 +167,11 @@ mesh-review commits its own auto-fixes and decisions.
 ## PREFLIGHT — run this before anything else
 
 ```bash
-PF="./skills/shared/preflight-env.sh"
+PF="${MESH_EXEC_ROOT:-.}/skills/shared/preflight-env.sh"
 [ -f "$PF" ] || [ -z "${GROK_SESSION_ID:-}" ] || PF="$(find "$HOME"/.grok/installed-plugins -path '*mesh-exec*/skills/shared/preflight-env.sh' 2>/dev/null | sort -V | tail -1)" || true
 [ -f "$PF" ] || PF="$(find "$HOME"/.claude/plugins -path '*mesh-exec*/skills/shared/preflight-env.sh' 2>/dev/null | sort -V | tail -1)" || true
 [ -f "$PF" ] || PF="$(find "$HOME"/.grok/plugins -path '*mesh-exec*/skills/shared/preflight-env.sh' 2>/dev/null | sort -V | tail -1)" || true
-[ -f "$PF" ] || { echo "preflight-env.sh not found — no mesh-exec here; expected degradation, NOT a broken environment"; exit 0; }
+[ -f "$PF" ] || { echo "preflight-env.sh not found — mesh-exec is not installed here; mesh-review cannot start without it"; exit 0; }
 bash "$PF"
 ```
 
@@ -179,10 +179,10 @@ Print the table verbatim. Do not soften a verdict into "probably fine". `OK` on 
 gemini rows is a heuristic — binary present, section valid, endpoint answered; NOT an auth
 check, and it does not prove the CLI points at that endpoint. `OK` on grok is stronger: the
 probe runs the CLI itself, which answers only when a login is live. `OK` on gh / glab means
-presence on PATH only. If the script is not found, say so and ask the user whether to update
-the plugin in this sandbox first or proceed on the built-in `claude` reviewer alone — and
-before offering that, check that `~/.config/mesh/config.yaml` exists: claude needs no
-config section, but the review skills refuse to start without a usable config.yaml at all.
+presence on PATH only. If the script is not found, say so and stop there: without mesh-exec
+the mesh-review plugin cannot even read its config. Ask the user to install `mesh-exec@zinin`
+in this sandbox and to put the config at `~/.config/mesh/config.yaml` before the review —
+there is no reviewer to fall back on.
 
 ## CONTEXT
 
