@@ -2,7 +2,7 @@
 
 All notable changes to mesh-review will be documented here.
 
-## [Unreleased]
+## [0.16.0] - 2026-09-27
 
 ### Changed
 - **Split out of claude-mesh 0.15.0.** `/mesh-review`, `/mesh-design-review`,
