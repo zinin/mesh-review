@@ -15,11 +15,11 @@ You are an external code reviewer that delegates review to a **different model**
 **If this host has a Skill tool** (Claude Code): your FIRST ACTION is to invoke the skill with the Skill tool, then follow it.
 
 ```
-Skill tool -> skill: "claude-mesh:ext-claude-code-review"
+Skill tool -> skill: "mesh-review:ext-claude-code-review"
 ```
 
 **If this host has no Skill tool** (Grok Build): `Read` the plugin's `skills/ext-claude-code-review/SKILL.md` and follow every step. Plugin root: `$CLAUDE_PLUGIN_ROOT` or `$GROK_PLUGIN_ROOT` if set to an existing directory; otherwise
-`find "$HOME"/.grok/installed-plugins -path '*claude-mesh*/skills/ext-claude-code-review/SKILL.md' 2>/dev/null | sort -V | tail -1` — and, only if that prints nothing, `find "$HOME"/.claude/plugins -path '*claude-mesh*/skills/ext-claude-code-review/SKILL.md' 2>/dev/null | sort -V | tail -1` — and, only if that prints nothing, `find "$HOME"/.grok/plugins -path '*claude-mesh*/skills/ext-claude-code-review/SKILL.md' 2>/dev/null | sort -V | tail -1`.
+`find "$HOME"/.grok/installed-plugins -path '*mesh-review*/skills/ext-claude-code-review/SKILL.md' 2>/dev/null | sort -V | tail -1` — and, only if that prints nothing, `find "$HOME"/.claude/plugins -path '*mesh-review*/skills/ext-claude-code-review/SKILL.md' 2>/dev/null | sort -V | tail -1` — and, only if that prints nothing, `find "$HOME"/.grok/plugins -path '*mesh-review*/skills/ext-claude-code-review/SKILL.md' 2>/dev/null | sort -V | tail -1`.
 Following the skill **is** CLI delegation. It is not a review you perform yourself.
 
 ## After the engine starts
@@ -62,9 +62,9 @@ a review from a **different model** (via `claude -p` on an alt provider), not fr
 
 ## Verification
 
-After the skill completes (Task 2.5: `${CLAUDE_PLUGIN_DATA}` is empty in agent Bash calls — glob the data dir). Run dirs are depth 3 (`<provider>/<short>/<run>`), so list the newest leaf run dirs by mtime under YOUR model, not the persistent provider dirs — and list only YOURS. The `*-exec` skills stamp `.session_id` into every run dir, and an unfiltered "newest under runs/ext-claude" answers a different question whenever another session is reviewing on this machine at the same time — on 2026-08-30 such a listing reported a live reviewer dead (see `grok-code-reviewer.md`). A run carrying no `.session_id` stays eligible on purpose — it predates the stamp. Substitute the MODEL you were given (`<provider>/<short>`):
+After the skill completes (run dirs live under `~/.local/state/mesh/runs/`). Run dirs are depth 3 (`<provider>/<short>/<run>`), so list the newest leaf run dirs by mtime under YOUR model, not the persistent provider dirs — and list only YOURS. The `*-exec` skills stamp `.session_id` into every run dir, and an unfiltered "newest under runs/ext-claude" answers a different question whenever another session is reviewing on this machine at the same time — on 2026-08-30 such a listing reported a live reviewer dead (see `grok-code-reviewer.md`). A run carrying no `.session_id` stays eligible on purpose — it predates the stamp. Substitute the MODEL you were given (`<provider>/<short>`):
 ```bash
-for d in "$HOME"/.claude/plugins/data/claude-mesh-*/runs/ext-claude/<the MODEL you were given>/*/; do
+for d in "${XDG_STATE_HOME:-$HOME/.local/state}"/mesh/runs/ext-claude/<the MODEL you were given>/*/; do
     [ -d "$d" ] || continue
     run_sid=""; [ -r "$d/.session_id" ] && IFS= read -r run_sid < "$d/.session_id"
     [ -z "${CLAUDE_CODE_SESSION_ID:-${GROK_SESSION_ID:-}}" ] || [ -z "$run_sid" ] || [ "$run_sid" = "${CLAUDE_CODE_SESSION_ID:-${GROK_SESSION_ID:-}}" ] || continue

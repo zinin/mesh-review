@@ -15,11 +15,11 @@ WRAPPER, not a reviewer.
 **If this host has a Skill tool** (Claude Code): your FIRST ACTION is to invoke the skill with the Skill tool, then follow it.
 
 ```
-Skill tool -> skill: "claude-mesh:claude-code-review"
+Skill tool -> skill: "mesh-review:claude-code-review"
 ```
 
 **If this host has no Skill tool** (Grok Build): `Read` the plugin's `skills/claude-code-review/SKILL.md` and follow every step. Plugin root: `$CLAUDE_PLUGIN_ROOT` or `$GROK_PLUGIN_ROOT` if set to an existing directory; otherwise
-`find "$HOME"/.grok/installed-plugins -path '*claude-mesh*/skills/claude-code-review/SKILL.md' 2>/dev/null | sort -V | tail -1` — and, only if that prints nothing, `find "$HOME"/.claude/plugins -path '*claude-mesh*/skills/claude-code-review/SKILL.md' 2>/dev/null | sort -V | tail -1` — and, only if that prints nothing, `find "$HOME"/.grok/plugins -path '*claude-mesh*/skills/claude-code-review/SKILL.md' 2>/dev/null | sort -V | tail -1`.
+`find "$HOME"/.grok/installed-plugins -path '*mesh-review*/skills/claude-code-review/SKILL.md' 2>/dev/null | sort -V | tail -1` — and, only if that prints nothing, `find "$HOME"/.claude/plugins -path '*mesh-review*/skills/claude-code-review/SKILL.md' 2>/dev/null | sort -V | tail -1` — and, only if that prints nothing, `find "$HOME"/.grok/plugins -path '*mesh-review*/skills/claude-code-review/SKILL.md' 2>/dev/null | sort -V | tail -1`.
 Following the skill **is** CLI delegation. It is not a review you perform yourself.
 
 ## After the engine starts
@@ -62,9 +62,8 @@ not from this session's model.
 
 Before returning, confirm the run directory exists and name it in your report. A review with no
 run directory did not happen — the orchestrator's delegation guard checks exactly that and scores
-a missing directory FLIP. Do NOT expand `${CLAUDE_PLUGIN_DATA}` in a Bash call: it is EMPTY there
-(Task 2.5), so a literal `${CLAUDE_PLUGIN_DATA}/runs/claude/...` searches `/runs/claude` and finds
-nothing — which would report a review that ran as one that did not. Glob the data dir instead.
+a missing directory FLIP. Run dirs live under
+`~/.local/state/mesh/runs/claude/` (`$XDG_STATE_HOME/mesh/runs/claude/` when `XDG_STATE_HOME` is set).
 Claude CLI run dirs are depth 2 (`<alias>/<run>`), so list the newest leaf, not the persistent
 alias dirs — and list only YOURS. Restrict the search to your own MODEL and your own session.
 A run carrying no `.session_id` stays eligible on purpose — it predates the stamp, and calling a
@@ -72,7 +71,7 @@ live one somebody else's would be worse than the collision the filter removes. S
 MODEL below (use `_default` when MODEL was omitted):
 
 ```bash
-for d in "$HOME"/.claude/plugins/data/claude-mesh-*/runs/claude/<the MODEL you were given, or _default>/*/; do
+for d in "${XDG_STATE_HOME:-$HOME/.local/state}"/mesh/runs/claude/<the MODEL you were given, or _default>/*/; do
     [ -d "$d" ] || continue
     run_sid=""; [ -r "$d/.session_id" ] && IFS= read -r run_sid < "$d/.session_id"
     [ -z "${CLAUDE_CODE_SESSION_ID:-${GROK_SESSION_ID:-}}" ] || [ -z "$run_sid" ] || [ "$run_sid" = "${CLAUDE_CODE_SESSION_ID:-${GROK_SESSION_ID:-}}" ] || continue

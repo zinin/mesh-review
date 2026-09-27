@@ -1,6 +1,6 @@
 ---
 name: code-review-fresh-session
-description: Generate a prompt for reviewing an implemented plan via /claude-mesh:mesh-review in a fresh Claude Code session, including one that runs in a sandbox
+description: Generate a prompt for reviewing an implemented plan via /mesh-review:mesh-review in a fresh Claude Code session, including one that runs in a sandbox
 ---
 
 # Fresh-Session Code-Review Prompt Generator
@@ -27,7 +27,7 @@ description: Generate a prompt for reviewing an implemented plan via /claude-mes
 ## Task
 
 Generate the prompt for a NEW Claude Code session whose job is to review the implementation
-this session just finished, through `/claude-mesh:mesh-review` — **not** to keep working on it.
+this session just finished, through `/mesh-review:mesh-review` — **not** to keep working on it.
 
 Arguments, optional, any order: `DESIGN_PATH=`, `PLAN_PATH=`, `TOPIC=`, `BASE_BRANCH=`.
 
@@ -132,7 +132,7 @@ one — the failure decision 2 of the design exists to prevent):
 ````
 ## TASK
 
-Review the implementation on branch <BRANCH> through `/claude-mesh:mesh-review`.
+Review the implementation on branch <BRANCH> through `/mesh-review:mesh-review`.
 Do not continue the work.
 
 ## DO NOT
@@ -167,11 +167,11 @@ mesh-review commits its own auto-fixes and decisions.
 ## PREFLIGHT — run this before anything else
 
 ```bash
-PF="./skills/shared/preflight-env.sh"
-[ -f "$PF" ] || [ -z "${GROK_SESSION_ID:-}" ] || PF="$(find "$HOME"/.grok/installed-plugins -path '*claude-mesh*/skills/shared/preflight-env.sh' 2>/dev/null | sort -V | tail -1)" || true
-[ -f "$PF" ] || PF="$(find "$HOME"/.claude/plugins -path '*claude-mesh*/skills/shared/preflight-env.sh' 2>/dev/null | sort -V | tail -1)" || true
-[ -f "$PF" ] || PF="$(find "$HOME"/.grok/plugins -path '*claude-mesh*/skills/shared/preflight-env.sh' 2>/dev/null | sort -V | tail -1)" || true
-[ -f "$PF" ] || { echo "preflight-env.sh not found — older claude-mesh here; expected degradation, NOT a broken environment"; exit 0; }
+PF="${MESH_EXEC_ROOT:-.}/skills/shared/preflight-env.sh"
+[ -f "$PF" ] || [ -z "${GROK_SESSION_ID:-}" ] || PF="$(find "$HOME"/.grok/installed-plugins -path '*mesh-exec*/skills/shared/preflight-env.sh' 2>/dev/null | sort -V | tail -1)" || true
+[ -f "$PF" ] || PF="$(find "$HOME"/.claude/plugins -path '*mesh-exec*/skills/shared/preflight-env.sh' 2>/dev/null | sort -V | tail -1)" || true
+[ -f "$PF" ] || PF="$(find "$HOME"/.grok/plugins -path '*mesh-exec*/skills/shared/preflight-env.sh' 2>/dev/null | sort -V | tail -1)" || true
+[ -f "$PF" ] || { echo "preflight-env.sh not found — mesh-exec is not installed here; mesh-review cannot start without it"; exit 0; }
 bash "$PF"
 ```
 
@@ -179,10 +179,10 @@ Print the table verbatim. Do not soften a verdict into "probably fine". `OK` on 
 gemini rows is a heuristic — binary present, section valid, endpoint answered; NOT an auth
 check, and it does not prove the CLI points at that endpoint. `OK` on grok is stronger: the
 probe runs the CLI itself, which answers only when a login is live. `OK` on gh / glab means
-presence on PATH only. If the script is not found, say so and ask the user whether to update
-the plugin in this sandbox first or proceed on the built-in `claude` reviewer alone — and
-before offering that, check a `config.yaml` exists in the plugin data dir: claude needs no
-config section, but the review skills refuse to start without a usable config.yaml at all.
+presence on PATH only. If the script is not found, say so and stop there: without mesh-exec
+the mesh-review plugin cannot even read its config. Ask the user to install `mesh-exec@zinin`
+in this sandbox and to put the config at `~/.config/mesh/config.yaml` before the review —
+there is no reviewer to fall back on.
 
 ## CONTEXT
 
@@ -197,7 +197,7 @@ config section, but the review skills refuse to start without a usable config.ya
 
 ## WHEN THE USER SAYS GO
 
-Invoke `/claude-mesh:mesh-review BASE_BRANCH=<BASE_BRANCH>` and select only reviewers the
+Invoke `/mesh-review:mesh-review BASE_BRANCH=<BASE_BRANCH>` and select only reviewers the
 preflight marked available. The argument is what makes the reviewers look at the range named
 under DOCUMENTS; drop it and each skill re-detects a base of its own.
 The two halves of the table answer different questions, so read both: **`SUMMARY available`

@@ -44,21 +44,21 @@ else
   # Same order as resolve-plugin-root.sh: env roots, then the three plugin trees, installed-plugins first inside a Grok session. The
   # helper cannot be called from here (it is what we are locating), so the branch has
   # to repeat it — and repeat it IDENTICALLY, or the two copies of one contract drift.
-  _LOADER=""
+  _MARKER=""
   for _R in "${CLAUDE_PLUGIN_ROOT:-}" "${GROK_PLUGIN_ROOT:-}"; do
-    [ -n "$_R" ] && [ -f "$_R/skills/shared/config-loader.sh" ] && { _LOADER="$_R/skills/shared/config-loader.sh"; break; }
+    [ -n "$_R" ] && [ -f "$_R/skills/shared/find-mesh-exec.sh" ] && { _MARKER="$_R/skills/shared/find-mesh-exec.sh"; break; }
   done
-  [ -f "$_LOADER" ] || [ -z "${GROK_SESSION_ID:-}" ] || _LOADER="$(find "$HOME"/.grok/installed-plugins -path '*claude-mesh*/skills/shared/config-loader.sh' 2>/dev/null | sort -V | tail -1)" || true
-  [ -f "$_LOADER" ] || _LOADER="$(find "$HOME"/.claude/plugins -path '*claude-mesh*/skills/shared/config-loader.sh' 2>/dev/null | sort -V | tail -1)" || true
-  [ -n "$_LOADER" ] || _LOADER="$(find "$HOME"/.grok/plugins -path '*claude-mesh*/skills/shared/config-loader.sh' 2>/dev/null | sort -V | tail -1)" || true
-  [ -n "$_LOADER" ] || { echo "STOP: claude-mesh plugin root not found — \$CLAUDE_PLUGIN_ROOT and \$GROK_PLUGIN_ROOT hold no plugin, and nothing under $HOME/.grok/installed-plugins, $HOME/.claude/plugins or $HOME/.grok/plugins matched" >&2; exit 1; }
-  PLUGIN_ROOT=$(cd "$(dirname "$_LOADER")/../.." && pwd)
+  [ -f "$_MARKER" ] || [ -z "${GROK_SESSION_ID:-}" ] || _MARKER="$(find "$HOME"/.grok/installed-plugins -path '*mesh-review*/skills/shared/find-mesh-exec.sh' 2>/dev/null | sort -V | tail -1)" || true
+  [ -f "$_MARKER" ] || _MARKER="$(find "$HOME"/.claude/plugins -path '*mesh-review*/skills/shared/find-mesh-exec.sh' 2>/dev/null | sort -V | tail -1)" || true
+  [ -n "$_MARKER" ] || _MARKER="$(find "$HOME"/.grok/plugins -path '*mesh-review*/skills/shared/find-mesh-exec.sh' 2>/dev/null | sort -V | tail -1)" || true
+  [ -n "$_MARKER" ] || { echo "STOP: mesh-review plugin root not found — \$CLAUDE_PLUGIN_ROOT and \$GROK_PLUGIN_ROOT hold no plugin, and nothing under $HOME/.grok/installed-plugins, $HOME/.claude/plugins or $HOME/.grok/plugins matched" >&2; exit 1; }
+  PLUGIN_ROOT=$(cd "$(dirname "$_MARKER")/../.." && pwd)
   SKILL_BASE="$PLUGIN_ROOT/skills/grok-code-review"
 fi
 
-Do not rewrite the fence. The else-branch searches `$HOME/.grok/installed-plugins` first (only inside a Grok session: bash has `GROK_SESSION_ID` there and not on Claude Code, so a two-host machine's stale snapshot never reaches a Claude Code run) — an unpublished `grok plugin install <tree>` copy, the one `grok inspect` loads, which a stale Claude cache must not outrank (measured 2026-09-01: `sort -V` on the cache picked 0.12.0 and the wrappers ran the old loader) — then `$HOME/.claude/plugins`, then `$HOME/.grok/plugins`, each version-sorted, `| sort -V | tail -1`, and each tried only when the previous root finds nothing. The roots are tried in PRIORITY order, never in one find over all three: `sort -V` compares whole paths, and `.claude` < `.grok`, so a single find picked the `.grok` copy whatever its version. `.claude` is where a published copy lives on both hosts — Grok loads a marketplace claude-mesh from the Claude cache; only an unpublished tree sits under `installed-plugins`. It then sets `PLUGIN_ROOT` two directories up, and sets `SKILL_BASE=$PLUGIN_ROOT/skills/<this-skill>`. The else-branch repeats `resolve-plugin-root.sh`'s remaining order IDENTICALLY — `$CLAUDE_PLUGIN_ROOT`, `$GROK_PLUGIN_ROOT`, then the three plugin trees — because it cannot call the helper (that is the file it is locating). Keep the two in step: they are one contract in two copies. If nothing resolves it STOPs, rather than resolving a `PLUGIN_ROOT` from the current directory.
+Do not rewrite the fence. The else-branch searches `$HOME/.grok/installed-plugins` first (only inside a Grok session: bash has `GROK_SESSION_ID` there and not on Claude Code, so a two-host machine's stale snapshot never reaches a Claude Code run) — an unpublished `grok plugin install <tree>` copy, the one `grok inspect` loads, which a stale Claude cache must not outrank (measured 2026-09-01: `sort -V` on the cache picked 0.12.0 and the wrappers ran the old loader) — then `$HOME/.claude/plugins`, then `$HOME/.grok/plugins`, each version-sorted, `| sort -V | tail -1`, and each tried only when the previous root finds nothing. The roots are tried in PRIORITY order, never in one find over all three: `sort -V` compares whole paths, and `.claude` < `.grok`, so a single find picked the `.grok` copy whatever its version. `.claude` is where a published copy lives on both hosts — Grok loads a marketplace mesh-review from the Claude cache; only an unpublished tree sits under `installed-plugins`. It then sets `PLUGIN_ROOT` two directories up, and sets `SKILL_BASE=$PLUGIN_ROOT/skills/<this-skill>`. The else-branch repeats `resolve-plugin-root.sh`'s remaining order IDENTICALLY — `$CLAUDE_PLUGIN_ROOT`, `$GROK_PLUGIN_ROOT`, then the three plugin trees — because it cannot call the helper (that is the file it is locating). Keep the two in step: they are one contract in two copies. If nothing resolves it STOPs, rather than resolving a `PLUGIN_ROOT` from the current directory.
 
-Shared scripts live at `$SKILL_BASE/../shared/<x>` (e.g. `code-review-prompt.md`); the loader is `$SKILL_BASE/../shared/config-loader.sh`. Grok manages its own auth — this skill does NOT source provider tokens; it delegates execution to the `grok-exec` skill.
+This plugin's own shared files live at `$SKILL_BASE/../shared/<x>` (e.g. `code-review-prompt.md`); the loader and the run scripts are mesh-exec's, at `$MESH_EXEC/skills/shared/<x>` with `MESH_EXEC=$(bash "$SKILL_BASE/../shared/find-mesh-exec.sh")`. Grok manages its own auth — this skill does NOT source provider tokens; it delegates execution to the `grok-exec` skill.
 
 ## CRITICAL: Tool Execution Rules
 
@@ -111,18 +111,20 @@ else
   # Same order as resolve-plugin-root.sh: env roots, then the three plugin trees, installed-plugins first inside a Grok session. The
   # helper cannot be called from here (it is what we are locating), so the branch has
   # to repeat it — and repeat it IDENTICALLY, or the two copies of one contract drift.
-  _LOADER=""
+  _MARKER=""
   for _R in "${CLAUDE_PLUGIN_ROOT:-}" "${GROK_PLUGIN_ROOT:-}"; do
-    [ -n "$_R" ] && [ -f "$_R/skills/shared/config-loader.sh" ] && { _LOADER="$_R/skills/shared/config-loader.sh"; break; }
+    [ -n "$_R" ] && [ -f "$_R/skills/shared/find-mesh-exec.sh" ] && { _MARKER="$_R/skills/shared/find-mesh-exec.sh"; break; }
   done
-  [ -f "$_LOADER" ] || [ -z "${GROK_SESSION_ID:-}" ] || _LOADER="$(find "$HOME"/.grok/installed-plugins -path '*claude-mesh*/skills/shared/config-loader.sh' 2>/dev/null | sort -V | tail -1)" || true
-  [ -f "$_LOADER" ] || _LOADER="$(find "$HOME"/.claude/plugins -path '*claude-mesh*/skills/shared/config-loader.sh' 2>/dev/null | sort -V | tail -1)" || true
-  [ -n "$_LOADER" ] || _LOADER="$(find "$HOME"/.grok/plugins -path '*claude-mesh*/skills/shared/config-loader.sh' 2>/dev/null | sort -V | tail -1)" || true
-  [ -n "$_LOADER" ] || { echo "STOP: claude-mesh plugin root not found — \$CLAUDE_PLUGIN_ROOT and \$GROK_PLUGIN_ROOT hold no plugin, and nothing under $HOME/.grok/installed-plugins, $HOME/.claude/plugins or $HOME/.grok/plugins matched" >&2; exit 1; }
-  PLUGIN_ROOT=$(cd "$(dirname "$_LOADER")/../.." && pwd)
+  [ -f "$_MARKER" ] || [ -z "${GROK_SESSION_ID:-}" ] || _MARKER="$(find "$HOME"/.grok/installed-plugins -path '*mesh-review*/skills/shared/find-mesh-exec.sh' 2>/dev/null | sort -V | tail -1)" || true
+  [ -f "$_MARKER" ] || _MARKER="$(find "$HOME"/.claude/plugins -path '*mesh-review*/skills/shared/find-mesh-exec.sh' 2>/dev/null | sort -V | tail -1)" || true
+  [ -n "$_MARKER" ] || _MARKER="$(find "$HOME"/.grok/plugins -path '*mesh-review*/skills/shared/find-mesh-exec.sh' 2>/dev/null | sort -V | tail -1)" || true
+  [ -n "$_MARKER" ] || { echo "STOP: mesh-review plugin root not found — \$CLAUDE_PLUGIN_ROOT and \$GROK_PLUGIN_ROOT hold no plugin, and nothing under $HOME/.grok/installed-plugins, $HOME/.claude/plugins or $HOME/.grok/plugins matched" >&2; exit 1; }
+  PLUGIN_ROOT=$(cd "$(dirname "$_MARKER")/../.." && pwd)
   SKILL_BASE="$PLUGIN_ROOT/skills/grok-code-review"
 fi
-LOADER="$SKILL_BASE/../shared/config-loader.sh"
+MESH_EXEC=$(bash "$SKILL_BASE/../shared/find-mesh-exec.sh") || exit 1
+LOADER="$MESH_EXEC/skills/shared/config-loader.sh"
+echo "MESH_EXEC=$MESH_EXEC"   # the no-Skill-tool step below reads mesh-exec's exec skill from this root
 command -v grok >/dev/null 2>&1 || { echo "STOP: grok CLI not found — install Grok Build with 'curl -fsSL https://x.ai/cli/install.sh | bash', then run 'grok login'"; exit 1; }
 echo "OK: grok found"
 command -v python3 >/dev/null 2>&1 || { echo "STOP: python3 not found - required by shared/render-template.py (Step 3)"; exit 1; }
@@ -144,7 +146,7 @@ GROK_ERR=$(mktemp) || { echo "STOP: mktemp failed"; exit 1; }
 FLAG_RC=0
 HAS_GROK=$("$LOADER" get-flag has_grok 2>"$GROK_ERR") || FLAG_RC=$?
 if [ "$FLAG_RC" -eq 2 ]; then
-    echo "STOP: there is no config.yaml yet — copy config.example.yaml into the plugin data dir and add a grok: section. It is user-owned; agents never create or edit it. The loader says:"
+    echo "STOP: there is no config.yaml at $("$LOADER" config-path) yet. If the loader's lines below give a command that moves the old claude-mesh config, run it; otherwise copy config.example.yaml there and add a grok: section. It is user-owned; agents never create or edit it. The loader says:"
     cat "$GROK_ERR"; rm -f "$GROK_ERR"; exit 1
 elif [ "$FLAG_RC" -ne 0 ]; then
     echo "STOP: config-loader could not read the grok: section (rc=$FLAG_RC) — config.yaml is user-owned; agents never edit it. The loader says:"
@@ -174,7 +176,7 @@ MODEL=$(cat <<'__MODEL_BOUNDARY_4b7e2c19_MODEL_END__'
 __MODEL_BOUNDARY_4b7e2c19_MODEL_END__
 )
 [ -n "$MODEL" ] || { echo "STOP: MODEL is required and was not substituted into this fence. Example: MODEL=grok-4.6"; exit 1; }
-printf '%s\n' "$GROK_CAT" | grep -Fxq -- "$MODEL" || { echo "STOP: MODEL '$MODEL' is not in the grok.models catalog ($(printf '%s' "$GROK_CAT" | tr '\n' ' ')) — pick one of those, or add it to config.yaml yourself. claude-mesh never substitutes a model of its own."; exit 1; }
+printf '%s\n' "$GROK_CAT" | grep -Fxq -- "$MODEL" || { echo "STOP: MODEL '$MODEL' is not in the grok.models catalog ($(printf '%s' "$GROK_CAT" | tr '\n' ' ')) — pick one of those, or add it to config.yaml yourself. mesh-review never substitutes a model of its own."; exit 1; }
 ```
 
 If any pre-flight check fails, STOP and report the error to the user verbatim. Do NOT edit config.yaml (or any plugin config) yourself — only the user changes it.
@@ -236,15 +238,15 @@ else
   # Same order as resolve-plugin-root.sh: env roots, then the three plugin trees, installed-plugins first inside a Grok session. The
   # helper cannot be called from here (it is what we are locating), so the branch has
   # to repeat it — and repeat it IDENTICALLY, or the two copies of one contract drift.
-  _LOADER=""
+  _MARKER=""
   for _R in "${CLAUDE_PLUGIN_ROOT:-}" "${GROK_PLUGIN_ROOT:-}"; do
-    [ -n "$_R" ] && [ -f "$_R/skills/shared/config-loader.sh" ] && { _LOADER="$_R/skills/shared/config-loader.sh"; break; }
+    [ -n "$_R" ] && [ -f "$_R/skills/shared/find-mesh-exec.sh" ] && { _MARKER="$_R/skills/shared/find-mesh-exec.sh"; break; }
   done
-  [ -f "$_LOADER" ] || [ -z "${GROK_SESSION_ID:-}" ] || _LOADER="$(find "$HOME"/.grok/installed-plugins -path '*claude-mesh*/skills/shared/config-loader.sh' 2>/dev/null | sort -V | tail -1)" || true
-  [ -f "$_LOADER" ] || _LOADER="$(find "$HOME"/.claude/plugins -path '*claude-mesh*/skills/shared/config-loader.sh' 2>/dev/null | sort -V | tail -1)" || true
-  [ -n "$_LOADER" ] || _LOADER="$(find "$HOME"/.grok/plugins -path '*claude-mesh*/skills/shared/config-loader.sh' 2>/dev/null | sort -V | tail -1)" || true
-  [ -n "$_LOADER" ] || { echo "STOP: claude-mesh plugin root not found — \$CLAUDE_PLUGIN_ROOT and \$GROK_PLUGIN_ROOT hold no plugin, and nothing under $HOME/.grok/installed-plugins, $HOME/.claude/plugins or $HOME/.grok/plugins matched" >&2; exit 1; }
-  PLUGIN_ROOT=$(cd "$(dirname "$_LOADER")/../.." && pwd)
+  [ -f "$_MARKER" ] || [ -z "${GROK_SESSION_ID:-}" ] || _MARKER="$(find "$HOME"/.grok/installed-plugins -path '*mesh-review*/skills/shared/find-mesh-exec.sh' 2>/dev/null | sort -V | tail -1)" || true
+  [ -f "$_MARKER" ] || _MARKER="$(find "$HOME"/.claude/plugins -path '*mesh-review*/skills/shared/find-mesh-exec.sh' 2>/dev/null | sort -V | tail -1)" || true
+  [ -n "$_MARKER" ] || _MARKER="$(find "$HOME"/.grok/plugins -path '*mesh-review*/skills/shared/find-mesh-exec.sh' 2>/dev/null | sort -V | tail -1)" || true
+  [ -n "$_MARKER" ] || { echo "STOP: mesh-review plugin root not found — \$CLAUDE_PLUGIN_ROOT and \$GROK_PLUGIN_ROOT hold no plugin, and nothing under $HOME/.grok/installed-plugins, $HOME/.claude/plugins or $HOME/.grok/plugins matched" >&2; exit 1; }
+  PLUGIN_ROOT=$(cd "$(dirname "$_MARKER")/../.." && pwd)
   SKILL_BASE="$PLUGIN_ROOT/skills/grok-code-review"
 fi
 DESC=$(cat <<'MESH_DESC_EOF'
@@ -263,7 +265,7 @@ python3 "$SKILL_BASE/../shared/render-template.py" "$SKILL_BASE/../shared/code-r
     PLAN_REFERENCE="$PLAN_REF" \
     > "$PROMPT_FILE" || { echo "STOP: prompt render failed - see stderr above"; exit 1; }
 [ -s "$PROMPT_FILE" ] || { echo "STOP: rendered prompt is empty"; exit 1; }
-# Grok loads the user's Claude Code plugins, so `claude-mesh:mesh-review` and every other
+# Grok loads the user's Claude Code plugins, so `mesh-review:mesh-review` and every other
 # skill on this machine is visible to it. Nothing stops it from "helpfully" launching one
 # instead of reviewing — and a nested orchestration would write run dirs this session never
 # dispatched. codex and gemini need no such line: they cannot see those skills at all.
@@ -272,7 +274,7 @@ cat >> "$PROMPT_FILE" << 'GROK_TOOLING_EOF' || { echo "STOP: could not append th
 ## Tooling constraint
 
 Do NOT invoke any skill or slash command, and do NOT delegate this review to another agent or
-orchestration. Names like `claude-mesh:mesh-review` may be visible in your environment; they
+orchestration. Names like `mesh-review:mesh-review` may be visible in your environment; they
 are not part of this task. Read the code with your own file, search and shell tools, and
 answer with the review itself.
 GROK_TOOLING_EOF
@@ -319,11 +321,10 @@ text for Step 4.
 **If this host has a Skill tool** (Claude Code): invoke `grok-exec` with the Skill tool, then follow it.
 
 ```
-Skill tool -> skill: "claude-mesh:grok-exec"
+Skill tool -> skill: "mesh-exec:grok-exec"
 ```
 
-**If this host has no Skill tool** (Grok Build): `Read` the plugin's `skills/grok-exec/SKILL.md` and follow every step. Plugin root: `$CLAUDE_PLUGIN_ROOT` or `$GROK_PLUGIN_ROOT` if set to an existing directory; otherwise
-`find "$HOME"/.grok/installed-plugins -path '*claude-mesh*/skills/grok-exec/SKILL.md' 2>/dev/null | sort -V | tail -1` — and, only if that prints nothing, `find "$HOME"/.claude/plugins -path '*claude-mesh*/skills/grok-exec/SKILL.md' 2>/dev/null | sort -V | tail -1` — and, only if that prints nothing, `find "$HOME"/.grok/plugins -path '*claude-mesh*/skills/grok-exec/SKILL.md' 2>/dev/null | sort -V | tail -1`.
+**If this host has no Skill tool** (Grok Build): `Read` mesh-exec's `skills/grok-exec/SKILL.md` and follow every step. mesh-exec's root is the `MESH_EXEC=` line the Pre-flight fence printed — what `find-mesh-exec.sh` found: `$MESH_EXEC_ROOT` when set, else `$HOME/.grok/installed-plugins` (inside a Grok session only), then `$HOME/.claude/plugins`, then `$HOME/.grok/plugins`, each version-sorted.
 Following the skill **is** CLI delegation. It is not a review you perform yourself.
 
 Pass these parameters:
@@ -340,7 +341,7 @@ nothing to resolve. Do NOT pass `REASONING_EFFORT` unless the caller explicitly 
 `grok-exec` resolves the level for the model it was handed by itself — `grok.model_efforts` for
 that model, then the section-wide `grok.reasoning_effort`.
 
-The run lands in `${CLAUDE_PLUGIN_DATA}/runs/grok/<model>/{timestamp}-review-{branch}/`:
+The run lands in `~/.local/state/mesh/runs/grok/<model>/{timestamp}-review-{branch}/`:
 
 ```
 ├── prompt.md       # The review prompt

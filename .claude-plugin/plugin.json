@@ -1,0 +1,15 @@
+{
+  "name": "mesh-review",
+  "version": "0.16.0",
+  "displayName": "Mesh Review",
+  "description": "Multi-model code and design review from inside the session: parallel reviewers on Claude, Codex, Gemini, Grok and alt-provider models, merged findings, auto-fixes and a guided walk through the disputed ones",
+  "author": {
+    "name": "Alexander V. Zinin",
+    "email": "azinin@gmail.com",
+    "url": "https://github.com/zinin"
+  },
+  "repository": "https://github.com/zinin/mesh-review",
+  "license": "MIT",
+  "keywords": ["agent-skills", "code-review", "design-review", "multi-model", "claude-code", "grok"],
+  "dependencies": ["mesh-exec", "session-relay"]
+}

@@ -1,20 +1,23 @@
 #!/usr/bin/env bash
+# resolve-plugin-root.sh — print the root of THIS plugin (mesh-review): the directory whose
+# skills/shared/ holds find-mesh-exec.sh, code-review-prompt.md and render-template.py.
+# mesh-exec, which holds the loader and the run scripts, is found by find-mesh-exec.sh.
 set -u
-loader_at() { [ -f "$1/skills/shared/config-loader.sh" ]; }
+root_at() { [ -f "$1/skills/shared/find-mesh-exec.sh" ]; }
 if [ -n "${SKILL_BASE:-}" ]; then
-    if loader_at "$SKILL_BASE"; then printf '%s\n' "$SKILL_BASE"; exit 0; fi
+    if root_at "$SKILL_BASE"; then printf '%s\n' "$SKILL_BASE"; exit 0; fi
     # SKILL_BASE is the skill dir (…/skills/ext-claude-exec)
     parent="$(cd "$SKILL_BASE/../.." && pwd)"
-    if loader_at "$parent"; then printf '%s\n' "$parent"; exit 0; fi
+    if root_at "$parent"; then printf '%s\n' "$parent"; exit 0; fi
 fi
-if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && loader_at "$CLAUDE_PLUGIN_ROOT"; then
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && root_at "$CLAUDE_PLUGIN_ROOT"; then
     printf '%s\n' "$CLAUDE_PLUGIN_ROOT"; exit 0
 fi
-if [ -n "${GROK_PLUGIN_ROOT:-}" ] && loader_at "$GROK_PLUGIN_ROOT"; then
+if [ -n "${GROK_PLUGIN_ROOT:-}" ] && root_at "$GROK_PLUGIN_ROOT"; then
     printf '%s\n' "$GROK_PLUGIN_ROOT"; exit 0
 fi
 # Unpublished Grok install (`grok plugin install <tree>`) copies the plugin to
-# ~/.grok/installed-plugins/claude-mesh-<hash>. That path is what `grok inspect`
+# ~/.grok/installed-plugins/mesh-review-<hash>. That path is what `grok inspect`
 # loads. A stale Claude-compat cache under ~/.claude/plugins must not win: measured
 # 2026-09-01, sort -V | tail -1 on the cache picked 0.12.0 and HOST_CLAUDE wrappers
 # ran the old loader. Search installed-plugins first, then the two cache trees.
@@ -24,12 +27,12 @@ fi
 # runs Grok smokes must not execute that snapshot — it falls behind the tree the moment a
 # commit lands (decided 2026-09-02) — so without the variable the order is 0.12.0's.
 found=""
-[ -z "${GROK_SESSION_ID:-}" ] || found="$(find "$HOME"/.grok/installed-plugins -path '*claude-mesh*/skills/shared/config-loader.sh' 2>/dev/null | sort -V | tail -1)" || true
-[ -n "$found" ] || found="$(find "$HOME"/.claude/plugins -path '*claude-mesh*/skills/shared/config-loader.sh' 2>/dev/null | sort -V | tail -1)" || true
-[ -n "$found" ] || found="$(find "$HOME"/.grok/plugins -path '*claude-mesh*/skills/shared/config-loader.sh' 2>/dev/null | sort -V | tail -1)" || true
+[ -z "${GROK_SESSION_ID:-}" ] || found="$(find "$HOME"/.grok/installed-plugins -path '*mesh-review*/skills/shared/find-mesh-exec.sh' 2>/dev/null | sort -V | tail -1)" || true
+[ -n "$found" ] || found="$(find "$HOME"/.claude/plugins -path '*mesh-review*/skills/shared/find-mesh-exec.sh' 2>/dev/null | sort -V | tail -1)" || true
+[ -n "$found" ] || found="$(find "$HOME"/.grok/plugins -path '*mesh-review*/skills/shared/find-mesh-exec.sh' 2>/dev/null | sort -V | tail -1)" || true
 if [ -n "$found" ]; then
     printf '%s\n' "$(cd "$(dirname "$found")/../.." && pwd)"
     exit 0
 fi
-echo "resolve-plugin-root: claude-mesh plugin root not found" >&2
+echo "resolve-plugin-root: mesh-review plugin root not found" >&2
 exit 1

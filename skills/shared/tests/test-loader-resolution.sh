@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Regression tests for the config-loader resolution snippet that the slash commands
-# duplicate (commands/mesh-review.md x2, commands/do-plan.md x2).
+# Regression tests for the find-mesh-exec.sh resolution snippet that the slash commands
+# duplicate (commands/mesh-review.md x5). The snippet locates this plugin's own finder; the
+# finder then locates mesh-exec, whose loader the command runs.
 #
 # The snippet must reach the loader of the ACTIVE plugin copy. It used to fail two ways:
 #
@@ -41,14 +42,14 @@ assert_eq() {
     fi
 }
 
-PRIMARY='LOADER="${CLAUDE_PLUGIN_ROOT}/skills/shared/config-loader.sh"'
+PRIMARY='FINDER="${CLAUDE_PLUGIN_ROOT}/skills/shared/find-mesh-exec.sh"'
 # The two roots are searched in PRIORITY order, never in one find over both: `sort -V`
 # compares whole paths and `.claude` < `.grok`, so a single find picked the .grok copy
 # whatever its version — the same class of silent mis-resolution as the original `head -1`.
-FALLBACK='[ -f "$LOADER" ] || LOADER="$(find "$HOME"/.claude/plugins -path '"'"'*claude-mesh*/skills/shared/config-loader.sh'"'"' 2>/dev/null | sort -V | tail -1)" || true'
-FALLBACK2='[ -f "$LOADER" ] || LOADER="$(find "$HOME"/.grok/plugins -path '"'"'*claude-mesh*/skills/shared/config-loader.sh'"'"' 2>/dev/null | sort -V | tail -1)" || true'
+FALLBACK='[ -f "$FINDER" ] || FINDER="$(find "$HOME"/.claude/plugins -path '"'"'*mesh-review*/skills/shared/find-mesh-exec.sh'"'"' 2>/dev/null | sort -V | tail -1)" || true'
+FALLBACK2='[ -f "$FINDER" ] || FINDER="$(find "$HOME"/.grok/plugins -path '"'"'*mesh-review*/skills/shared/find-mesh-exec.sh'"'"' 2>/dev/null | sort -V | tail -1)" || true'
 # installed-plugins is searched only inside a Grok session (GROK_SESSION_ID set) — see Test 6.
-FALLBACK_INST='[ -f "$LOADER" ] || [ -z "${GROK_SESSION_ID:-}" ] || LOADER="$(find "$HOME"/.grok/installed-plugins -path '"'"'*claude-mesh*/skills/shared/config-loader.sh'"'"' 2>/dev/null | sort -V | tail -1)" || true'
+FALLBACK_INST='[ -f "$FINDER" ] || [ -z "${GROK_SESSION_ID:-}" ] || FINDER="$(find "$HOME"/.grok/installed-plugins -path '"'"'*mesh-review*/skills/shared/find-mesh-exec.sh'"'"' 2>/dev/null | sort -V | tail -1)" || true'
 
 # === Test 1: every command site uses the same resolver ===
 # The counts are a deliberate canary, not incidental. A new command that resolves the loader
@@ -73,21 +74,24 @@ n_primary=$(sed 's/^[[:space:]]*//' "$CMD_DIR"/*.md | grep -Fxc "$PRIMARY")
 n_fallback=$(sed 's/^[[:space:]]*//' "$CMD_DIR"/*.md | grep -Fxc "$FALLBACK")
 n_fallback2=$(sed 's/^[[:space:]]*//' "$CMD_DIR"/*.md | grep -Fxc "$FALLBACK2")
 n_fallback_inst=$(sed 's/^[[:space:]]*//' "$CMD_DIR"/*.md | grep -Fxc "$FALLBACK_INST")
-assert_eq "7 primary lines across commands/" "7" "$n_primary"
-assert_eq "7 .claude fallback lines across commands/" "7" "$n_fallback"
-assert_eq "7 .grok fallback lines across commands/" "7" "$n_fallback2"
-assert_eq "7 installed-plugins fallback lines across commands/" "7" "$n_fallback_inst"
+assert_eq "5 primary lines across commands/" "5" "$n_primary"
+assert_eq "5 .claude fallback lines across commands/" "5" "$n_fallback"
+assert_eq "5 .grok fallback lines across commands/" "5" "$n_fallback2"
+assert_eq "5 installed-plugins fallback lines across commands/" "5" "$n_fallback_inst"
+MX='MESH_EXEC="$(bash "$FINDER")" || exit 1'
+LD='LOADER="$MESH_EXEC/skills/shared/config-loader.sh"'
+assert_eq "5 MESH_EXEC assignments with || exit 1 across commands/" "5" "$(sed 's/^[[:space:]]*//' "$CMD_DIR"/*.md | grep -Fxc "$MX")"
+assert_eq "5 LOADER lines built from \$MESH_EXEC across commands/" "5" "$(sed 's/^[[:space:]]*//' "$CMD_DIR"/*.md | grep -Fxc "$LD")"
 # Neither root may be searched together with the other in one find.
 assert_eq "0 cross-root finds remain" "0" \
     "$(grep -c '.claude/plugins "$HOME"/.grok/plugins' "$CMD_DIR"/*.md | awk -F: '{s+=$2} END {print s+0}')"
 assert_eq "mesh-review.md carries 5" "5" \
     "$(sed 's/^[[:space:]]*//' "$CMD_DIR/mesh-review.md" | grep -Fxc "$PRIMARY")"
-assert_eq "do-plan.md carries 2" "2" "$(grep -Fxc "$PRIMARY" "$CMD_DIR/do-plan.md")"
 
 # === Test 2: the version-blind glob is gone ===
 # `head -1` on the loader glob is the original defect — it must not come back anywhere.
 echo "=== Test 2: no version-blind 'head -1' loader glob remains ==="
-stale=$(grep -h "claude-mesh\*/skills/shared/config-loader.sh" "$CMD_DIR"/*.md 2>/dev/null | grep -c 'head -1')
+stale=$(grep -h "mesh-review\*/skills/shared/find-mesh-exec.sh" "$CMD_DIR"/*.md 2>/dev/null | grep -c 'head -1')
 assert_eq "0 occurrences of 'head -1' on the loader glob" "0" "$stale"
 
 # --- extract the live snippet for execution ---
@@ -100,24 +104,24 @@ assert_eq "0 occurrences of 'head -1' on the loader glob" "0" "$stale"
 SNIPPET="$(grep -Fx -A4 -h "$PRIMARY" "$CMD_DIR/mesh-review.md" | grep -v '^--$' | head -5)"
 echo "=== extraction ==="
 assert_eq "snippet extracted (5 lines)" "5" "$(printf '%s' "$SNIPPET" | grep -c '')"
-assert_match_snippet "…and the last line is the not-found guard" '\[ -f "$LOADER" \] || {' "$SNIPPET"
+assert_match_snippet "…and the last line is the not-found guard" '\[ -f "$FINDER" \] || {' "$SNIPPET"
 
 # Run the extracted snippet under a controlled HOME / plugin root. rc is asserted too:
 # an empty $GOT must mean "resolver found nothing", never "the snippet failed to run".
 run_snippet() {   # $1 = HOME, $2 = CLAUDE_PLUGIN_ROOT, $3 = GROK_SESSION_ID (empty = not a Grok session)
-    GOT=$(HOME="$1" CLAUDE_PLUGIN_ROOT="$2" GROK_SESSION_ID="${3:-}" bash -c "$SNIPPET"$'\n''printf %s "$LOADER"' 2>/dev/null); RC=$?
+    GOT=$(HOME="$1" CLAUDE_PLUGIN_ROOT="$2" GROK_SESSION_ID="${3:-}" bash -c "$SNIPPET"$'\n''printf %s "$FINDER"' 2>/dev/null); RC=$?
 }
 
 # === Test 3: substituted ${CLAUDE_PLUGIN_ROOT} wins over anything installed ===
 # This is the --plugin-dir dev-load case: the working tree must beat the cached copy.
 echo "=== Test 3: substituted plugin root wins over the installed cache ==="
 TDIR=$(mktemp -d)
-mkdir -p "$TDIR/dev/skills/shared" "$TDIR/home/.claude/plugins/cache/zinin/claude-mesh/9.9.9/skills/shared"
-: > "$TDIR/dev/skills/shared/config-loader.sh"
-: > "$TDIR/home/.claude/plugins/cache/zinin/claude-mesh/9.9.9/skills/shared/config-loader.sh"
+mkdir -p "$TDIR/dev/skills/shared" "$TDIR/home/.claude/plugins/cache/zinin/mesh-review/9.9.9/skills/shared"
+: > "$TDIR/dev/skills/shared/find-mesh-exec.sh"
+: > "$TDIR/home/.claude/plugins/cache/zinin/mesh-review/9.9.9/skills/shared/find-mesh-exec.sh"
 run_snippet "$TDIR/home" "$TDIR/dev"
 assert_eq "snippet ran cleanly" "0" "$RC"
-assert_eq "resolves to the dev root" "$TDIR/dev/skills/shared/config-loader.sh" "$GOT"
+assert_eq "resolves to the dev root" "$TDIR/dev/skills/shared/find-mesh-exec.sh" "$GOT"
 rm -rf "$TDIR"
 
 # === Test 4: without substitution, the newest INSTALLED version wins ===
@@ -126,12 +130,12 @@ rm -rf "$TDIR"
 echo "=== Test 4: fallback picks the highest version (0.10.0 over 0.9.0) ==="
 TDIR=$(mktemp -d)
 for v in 0.9.0 0.10.0; do
-    mkdir -p "$TDIR/home/.claude/plugins/cache/zinin/claude-mesh/$v/skills/shared"
-    : > "$TDIR/home/.claude/plugins/cache/zinin/claude-mesh/$v/skills/shared/config-loader.sh"
+    mkdir -p "$TDIR/home/.claude/plugins/cache/zinin/mesh-review/$v/skills/shared"
+    : > "$TDIR/home/.claude/plugins/cache/zinin/mesh-review/$v/skills/shared/find-mesh-exec.sh"
 done
 run_snippet "$TDIR/home" ""
 assert_eq "snippet ran cleanly" "0" "$RC"
-assert_eq "resolves to 0.10.0" "$TDIR/home/.claude/plugins/cache/zinin/claude-mesh/0.10.0/skills/shared/config-loader.sh" "$GOT"
+assert_eq "resolves to 0.10.0" "$TDIR/home/.claude/plugins/cache/zinin/mesh-review/0.10.0/skills/shared/find-mesh-exec.sh" "$GOT"
 rm -rf "$TDIR"
 
 # === Test 6: installed-plugins is a Grok-session root ===
@@ -141,21 +145,21 @@ rm -rf "$TDIR"
 # the moment a commit lands (decided 2026-09-02).
 echo "=== Test 6: installed-plugins wins only inside a Grok session ==="
 TDIR=$(mktemp -d)
-mkdir -p "$TDIR/home/.claude/plugins/cache/zinin/claude-mesh/0.12.0/skills/shared" \
-         "$TDIR/home/.grok/installed-plugins/claude-mesh-aabbccdd/skills/shared"
-: > "$TDIR/home/.claude/plugins/cache/zinin/claude-mesh/0.12.0/skills/shared/config-loader.sh"
-: > "$TDIR/home/.grok/installed-plugins/claude-mesh-aabbccdd/skills/shared/config-loader.sh"
+mkdir -p "$TDIR/home/.claude/plugins/cache/zinin/mesh-review/0.12.0/skills/shared" \
+         "$TDIR/home/.grok/installed-plugins/mesh-review-aabbccdd/skills/shared"
+: > "$TDIR/home/.claude/plugins/cache/zinin/mesh-review/0.12.0/skills/shared/find-mesh-exec.sh"
+: > "$TDIR/home/.grok/installed-plugins/mesh-review-aabbccdd/skills/shared/find-mesh-exec.sh"
 run_snippet "$TDIR/home" "" "grok-session-1"
 assert_eq "snippet ran cleanly (Grok session)" "0" "$RC"
-assert_eq "Grok session: the snapshot wins" "$TDIR/home/.grok/installed-plugins/claude-mesh-aabbccdd/skills/shared/config-loader.sh" "$GOT"
+assert_eq "Grok session: the snapshot wins" "$TDIR/home/.grok/installed-plugins/mesh-review-aabbccdd/skills/shared/find-mesh-exec.sh" "$GOT"
 run_snippet "$TDIR/home" ""
 assert_eq "snippet ran cleanly (no Grok session)" "0" "$RC"
-assert_eq "no Grok session: the Claude cache wins" "$TDIR/home/.claude/plugins/cache/zinin/claude-mesh/0.12.0/skills/shared/config-loader.sh" "$GOT"
+assert_eq "no Grok session: the Claude cache wins" "$TDIR/home/.claude/plugins/cache/zinin/mesh-review/0.12.0/skills/shared/find-mesh-exec.sh" "$GOT"
 rm -rf "$TDIR"
 
 # === Test 5: nothing installed and no substitution -> the guard exits 1 ===
 # The point is that the call site FAILS LOUDLY rather than carrying an empty $LOADER into
-# `"$LOADER" get-flag …`, where the shell would report a confusing "not found".
+# `"$FINDER" get-flag …`, where the shell would report a confusing "not found".
 echo "=== Test 5: nothing to find makes the guard exit 1 ==="
 TDIR=$(mktemp -d)
 mkdir -p "$TDIR/home/.claude/plugins"
@@ -172,15 +176,15 @@ rm -rf "$TDIR"
 # Run the live command snippet under -e so a missing `|| true` cannot hide here.
 echo "=== Test 7: missing installed-plugins does not abort under set -euo pipefail ==="
 TDIR=$(mktemp -d)
-mkdir -p "$TDIR/home/.claude/plugins/cache/zinin/claude-mesh/0.12.0/skills/shared"
-: > "$TDIR/home/.claude/plugins/cache/zinin/claude-mesh/0.12.0/skills/shared/config-loader.sh"
+mkdir -p "$TDIR/home/.claude/plugins/cache/zinin/mesh-review/0.12.0/skills/shared"
+: > "$TDIR/home/.claude/plugins/cache/zinin/mesh-review/0.12.0/skills/shared/find-mesh-exec.sh"
 GOT=$(HOME="$TDIR/home" CLAUDE_PLUGIN_ROOT="" GROK_SESSION_ID="grok-session-1" \
     bash -c 'set -euo pipefail
 '"$SNIPPET"'
-printf %s "$LOADER"'); RC=$?
+printf %s "$FINDER"'); RC=$?
 assert_eq "strict snippet ran cleanly" "0" "$RC"
 assert_eq "falls through to the Claude cache" \
-    "$TDIR/home/.claude/plugins/cache/zinin/claude-mesh/0.12.0/skills/shared/config-loader.sh" "$GOT"
+    "$TDIR/home/.claude/plugins/cache/zinin/mesh-review/0.12.0/skills/shared/find-mesh-exec.sh" "$GOT"
 rm -rf "$TDIR"
 
 echo ""

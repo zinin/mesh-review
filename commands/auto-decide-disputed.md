@@ -1,14 +1,14 @@
 ---
 name: auto-decide-disputed
-description: Decide every remaining disputed review issue autonomously — the same structured analysis and recommendation as the interactive discussion, plus an explicit self-check, applied without waiting for an answer. Invoked by the USER during /claude-mesh:mesh-review or /claude-mesh:mesh-design-review, or by their `autodecide` argument — never something to reach for on your own initiative.
+description: Decide every remaining disputed review issue autonomously — the same structured analysis and recommendation as the interactive discussion, plus an explicit self-check, applied without waiting for an answer. Invoked by the USER during /mesh-review:mesh-review or /mesh-review:mesh-design-review, or by their `autodecide` argument — never something to reach for on your own initiative.
 ---
 
 # Auto-Decide Disputed Issues
 
 ## Purpose
 
-User signal to the orchestrator running the disputed phase of `/claude-mesh:mesh-review` (Step 6.4)
-or `/claude-mesh:mesh-design-review` (Step 12): **write the same full analysis for every remaining
+User signal to the orchestrator running the disputed phase of `/mesh-review:mesh-review` (Step 6.4)
+or `/mesh-review:mesh-design-review` (Step 12): **write the same full analysis for every remaining
 disputed issue, test your own recommendation against its strongest counter-argument, then apply it
 — do not wait for an answer.**
 
@@ -35,9 +35,9 @@ What is **not** overridden, and still holds exactly as written:
 
 ## Two entry points, one protocol
 
-- **The user invokes `/claude-mesh:auto-decide-disputed`** at any point of a review session.
-- **The `autodecide` argument** was passed to `/claude-mesh:mesh-review` or
-  `/claude-mesh:mesh-design-review`; the orchestrator then invokes this command itself, through the
+- **The user invokes `/mesh-review:auto-decide-disputed`** at any point of a review session.
+- **The `autodecide` argument** was passed to `/mesh-review:mesh-review` or
+  `/mesh-review:mesh-design-review`; the orchestrator then invokes this command itself, through the
   Skill tool, at the moment it enters the disputed phase. The argument has no behaviour of its own
   — it automates the invocation.
 
@@ -46,8 +46,8 @@ Both paths execute this file, and from the moment it is loaded it governs the di
 **Before anything else — whose invocation is this?** This file is reachable through the Skill tool,
 so a model can invoke it as readily as a user can type it, and everything below then acts on the
 repository without asking. Proceed only when the invocation traces to one of the two entry points
-above: the user typed the command, or `AUTODECIDE` was bound `true` at `/claude-mesh:mesh-review`
-Step 0 / `/claude-mesh:mesh-design-review` Step 5 and the running flow is handing over at the top of
+above: the user typed the command, or `AUTODECIDE` was bound `true` at `/mesh-review:mesh-review`
+Step 0 / `/mesh-review:mesh-design-review` Step 5 and the running flow is handing over at the top of
 its disputed phase. If neither holds — you reached for this command yourself, mid-review, because an
 issue was hard — **that is not consent.** Say so in one line and go back to Iron Rules 7–8: write
 the analysis and end the turn on it.
@@ -64,8 +64,8 @@ for the other entry point, the user invoking the command somewhere in the middle
 | **S1** | The disputed phase is running and this turn is waiting for the user's answer on the current issue | That issue is FIRST in the queue. Its analysis is already on screen — do **not** rewrite it: append the `Проверка решения` section, decide, apply, commit, then continue with the rest. If the user answered it before invoking this command, their answer stands — start with the next issue |
 | **S2** | Issues are classified but the disputed phase has not started (auto-fixes being applied, or their commit still pending) | Finish the auto-fixes and make the intermediate commit first — Iron Rules 1–2 are not overridden — then start the run. **Invoking this command is not approval of the auto-fixes**: if the flow is waiting for that confirmation, still ask for it as usual — the consent this invocation carries is about deciding disputed issues, nothing else |
 | **S3** | Anything else before the disputed phase begins — reviewers being selected or dispatched, the watch loop running, the delegation guard, dedupe, classification | Bind `AUTODECIDE = true` and echo it (see the paragraph below the table), then say in one line that the signal is armed and when it fires. Continue the normal flow completely unchanged, and start the run when the disputed phase begins |
-| **S4** | The disputed phase is over, or there were no disputed issues | Issues deferred earlier in this session — by «стоп» or by `default` mode — **are** the queue: decide them now. Their analyses are usually already in this session — reuse them exactly as S1 does: do not rewrite an analysis that is on screen, append `Проверка решения` to it. If there are none, say there is nothing left to decide and stop. Do not invent issues. In `/claude-mesh:mesh-design-review` the run also has to close the iteration record — see the paragraph below the table |
-| **S5** | There is no review cycle in this session at all | Say there is nothing to decide. **Do NOT start a review** — this command decides, it does not review. Point at `/claude-mesh:mesh-review autodecide` or `/claude-mesh:mesh-design-review autodecide` |
+| **S4** | The disputed phase is over, or there were no disputed issues | Issues deferred earlier in this session — by «стоп» or by `default` mode — **are** the queue: decide them now. Their analyses are usually already in this session — reuse them exactly as S1 does: do not rewrite an analysis that is on screen, append `Проверка решения` to it. If there are none, say there is nothing left to decide and stop. Do not invent issues. In `/mesh-review:mesh-design-review` the run also has to close the iteration record — see the paragraph below the table |
+| **S5** | There is no review cycle in this session at all | Say there is nothing to decide. **Do NOT start a review** — this command decides, it does not review. Point at `/mesh-review:mesh-review autodecide` or `/mesh-review:mesh-design-review autodecide` |
 
 **More than one row can match — take the lowest-numbered one.** S3 is deliberately broad, so that
 every moment before the disputed phase has a row; the specific states win over it by number. Two
@@ -82,13 +82,13 @@ without this those steps read the mode as off and make exactly the sweep-up comm
 to replace.
 
 **S4 — the record has to be closed by hand, in either host.** Step 6.6 and Steps 13–15 have already
-run; they do not run again. In `/claude-mesh:mesh-review` that means printing a closing block
+run; they do not run again. In `/mesh-review:mesh-review` that means printing a closing block
 yourself when the S4 run ends — the `Решено автоматически` and `из них под вопросом` counts for what
 you have just decided, one line per `под вопросом` decision, and the
 `Все авто-решения: git log --grep=auto-decide-disputed --oneline` line. Skip it and the last summary
 on screen still lists those issues as deferred, contradicting git, while the confidence flags — what
 2.c makes the user re-check by — are recorded nowhere they will ever see. In
-`/claude-mesh:mesh-design-review` those issues were already written into the current iteration file
+`/mesh-review:mesh-design-review` those issues were already written into the current iteration file
 as `Отложено (стоп)` and committed by Step 14 — a committed record that now contradicts the
 decisions you have just made, and the one the next iteration reads as what was decided. So after the
 run, append a `## Дополнение — autodecide (после «стоп»)` block to that same iteration file, with
@@ -97,7 +97,7 @@ one entry per decision in Step 13's per-issue format (`**Статус:** Реш�
 `Статистика` counts in place (`Отложено (стоп)` down, `Решено автоматически (autodecide)` and
 `из них под вопросом` up); and commit that file alone with
 `docs: review iter N — autodecide addendum (<TOPIC>)` — carrying the same trailing
-`Решено автоматически: /claude-mesh:auto-decide-disputed` line as every decision commit, so the
+`Решено автоматически: /mesh-review:auto-decide-disputed` line as every decision commit, so the
 addendum is not invisible to `git log --grep=auto-decide-disputed`.
 
 **Appending is not enough — supersede the original record too.** The issue's existing
@@ -129,7 +129,7 @@ Announce the queue before the first issue:
 edits (Step 6.5 / Step 14) stand down in this mode, so a rule that waits for the first decision can
 be skipped entirely by an early exit. If it carries any uncommitted edits produced by the
 disputed phase so far — issues the user answered and issues you auto-applied after analysis alike —
-commit those first, on their own: in `/claude-mesh:mesh-review` with
+commit those first, on their own: in `/mesh-review:mesh-review` with
 the flow's existing message `review: apply decisions from external review discussion`; in design
 review with `docs: review iter N — decisions (<TOPIC>)` — decisions only, because the iteration log
 is not written yet and Step 14 commits it separately, under the `docs: review iter N — log
@@ -154,12 +154,12 @@ depth:
 ```
 ## [Спорное i/D] <Issue Title>
 <header verbatim from the running flow — do NOT mix the two:
-   /claude-mesh:mesh-review  → **Файл:** …  **Уровень:** …  **Нашли:** …
+   /mesh-review:mesh-review  → **Файл:** …  **Уровень:** …  **Нашли:** …
    design review            → title carries the [TYPE-N] id, and the only field is **Источник:** …>
 ### Суть замечания
 ### Анализ
 ### Варианты решения       (each with Что делаем / Плюсы / Минусы; the no-change variant where it
-                           applies — «Не исправлять» in /claude-mesh:mesh-review, «Оставить как
+                           applies — «Не исправлять» in /mesh-review:mesh-review, «Оставить как
                            есть» in design review)
 ### Рекомендация
 ```
@@ -253,14 +253,14 @@ is what the user re-checks by.
    out of their index, so it is not something to stop over. Blanket per-file staging never was the
    isolation here — `git add <file>` takes the whole file anyway; the pathspec is.
 
-   In `/claude-mesh:mesh-review` the message is:
+   In `/mesh-review:mesh-review` the message is:
    ```
    review: auto-decide <short issue name> — вариант <X>
 
    <1–2 sentences: what changed and why this variant>
    Уверенность: уверенно | под вопросом (<what was missing>)
    Нашли: <reviewers that raised it>
-   Решено автоматически: /claude-mesh:auto-decide-disputed
+   Решено автоматически: /mesh-review:auto-decide-disputed
    ```
    In design review, the subject follows its neighbours instead, body unchanged:
    ```
@@ -328,8 +328,8 @@ those over files a failure as a decision, under a generic message, while the sum
 same issue deferred; and a hook's collateral rewrite of a design or plan document is not the
 decision's file, so naming only the decision's files leaves it to be swept in. Name the whole set
 to the host as out of scope, leave those paths where they are, and say so. In
-`/claude-mesh:mesh-review` go on to Step 6.6 and print its summary for what was decided, with the
-failed issue and the rest of the queue listed as deferred. In `/claude-mesh:mesh-design-review` go
+`/mesh-review:mesh-review` go on to Step 6.6 and print its summary for what was decided, with the
+failed issue and the rest of the queue listed as deferred. In `/mesh-review:mesh-design-review` go
 on to Steps 13–14: the iteration file and its commit are what the NEXT iteration reads, and
 `agents/review-discussion.md` builds its answer base out of iteration files, not out of `git log` —
 skip them and issues already committed into the design document come back as new, with nothing on
@@ -354,14 +354,14 @@ the summary like any other decision. Never invent an edit so that there is somet
 
 ## Step 4: What reaches the summary
 
-Feed the running flow's own summary — Step 6.6 in `/claude-mesh:mesh-review`, Steps 13/15/16 in
+Feed the running flow's own summary — Step 6.6 in `/mesh-review:mesh-review`, Steps 13/15/16 in
 design review. In state S4 those steps have already run and do not run again; print the same facts
 yourself instead, as §S4 says:
 
 - how many issues were decided here (`Решено автоматически`), and how many of those are
   `под вопросом` — Step 6.6's counters, `Статистика` in Step 13 and the counts in Step 15;
 - one line per `под вопросом` decision: issue, chosen variant, commit hash (`—` when the decision
-  was the no-change variant), what was missing. In `/claude-mesh:mesh-review` that goes in Step
+  was the no-change variant), what was missing. In `/mesh-review:mesh-review` that goes in Step
   6.6 — or, in state S4, in the closing block you print yourself; in design review, in Step 16's
   `Под вопросом — перепроверьте` section, with the same fact recorded per issue as
   `**Уверенность:**` by Step 13. Step 15 is a fixed question — do not put
